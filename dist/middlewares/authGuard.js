@@ -1,0 +1,15 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.authGuard = authGuard;
+const supabaseClient_1 = require("../config/supabaseClient");
+async function authGuard(req, res, next) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader)
+        return res.status(401).json({ success: false, error: { message: 'Missing auth token' } });
+    const token = authHeader.replace('Bearer ', '');
+    const { data, error } = await supabaseClient_1.supabaseAdmin.auth.getUser(token);
+    if (error || !data.user)
+        return res.status(401).json({ success: false, error: { message: 'Invalid token' } });
+    req.user = data.user;
+    next();
+}
