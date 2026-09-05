@@ -20,7 +20,7 @@ export const contentService = {
   async update(kind: 'events' | 'offers' | 'gallery', id: string, input: any) { await requireContent(kind, id); const map: any = kind === 'events' ? { event_name_en: input.title?.en, event_name_mr: input.title?.mr, description_en: input.description?.en, description_mr: input.description?.mr, event_date: input.date, start_time: input.time, venue_en: input.venue?.en, venue_mr: input.venue?.mr, enquiry_number: input.enquiryNo, website_url: input.eventLink, poster_url: input.photo || input.image, is_active: input.isActive } : kind === 'offers' ? { offer_title_en: input.title?.en, offer_title_mr: input.title?.mr, discount_percentage: input.discountPercentage, discount_badge_en: input.discountBadge?.en, discount_badge_mr: input.discountBadge?.mr, coupon_code: input.couponCode, validity_en: input.validUntil?.en, validity_mr: input.validUntil?.mr, terms_en: input.terms?.en || input.description?.en, terms_mr: input.terms?.mr || input.description?.mr, is_active: input.isActive } : { image_url: input.url || input.imageUrl, caption: typeof input.caption === 'string' ? input.caption : input.caption?.en || input.caption?.mr, category: typeof input.category === 'string' ? input.category : input.category?.en || input.category?.mr, sort_order: input.sortOrder, is_active: input.isActive }; Object.keys(map).forEach(key => map[key] === undefined && delete map[key]); const { data, error } = await supabaseAdmin.from(table(kind)).update({ ...map, updated_at: new Date().toISOString() }).eq('id', id).select('*').single(); if (error || !data) throw new ApiError(error?.message || 'Record not found', error ? 400 : 404); return data; },
   async remove(kind: 'events' | 'offers' | 'gallery', id: string) {
     await requireContent(kind, id);
-    if (kind === 'gallery' || kind === 'events') {
+    if (kind === 'gallery' || kind === 'events' || kind === 'offers') {
       const { data, error } = await supabaseAdmin
         .from(table(kind))
         .delete()
@@ -31,14 +31,5 @@ export const contentService = {
       if (!data) throw new ApiError(`${kind} record not found`, 404);
       return;
     }
-    const { data, error } = await supabaseAdmin
-      .from(table(kind))
-      .update({ deleted_at: new Date().toISOString(), is_active: false, updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .is('deleted_at', null)
-      .select('id')
-      .maybeSingle();
-    if (error) throw new ApiError(error.message, 400);
-    if (!data) throw new ApiError(`${kind} record not found`, 404);
   }
 };
