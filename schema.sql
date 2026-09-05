@@ -17,9 +17,15 @@ create table if not exists public.businesses (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references public.profiles(id) on delete cascade,
   business_name text not null,
+  business_name_mr text,
   slug text not null,
   category text,
+  category_mr text,
   description text,
+  description_mr text,
+  owner_name_mr text,
+  designation_mr text,
+  tagline_mr text,
   logo_url text,
   phone text,
   whatsapp_number text,
@@ -38,6 +44,12 @@ create table if not exists public.businesses (
 -- Existing installations: add the field used to preserve the complete card model.
 alter table public.businesses add column if not exists details jsonb not null default '{}'::jsonb;
 alter table public.businesses add column if not exists phone text;
+alter table public.businesses add column if not exists business_name_mr text;
+alter table public.businesses add column if not exists category_mr text;
+alter table public.businesses add column if not exists description_mr text;
+alter table public.businesses add column if not exists owner_name_mr text;
+alter table public.businesses add column if not exists designation_mr text;
+alter table public.businesses add column if not exists tagline_mr text;
 alter table public.businesses add column if not exists status text not null default 'draft';
 alter table public.businesses add column if not exists is_verified boolean not null default false;
 alter table public.businesses add column if not exists plan_id text not null default 'free';

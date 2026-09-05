@@ -15,3 +15,27 @@ export const createBusinessSchema = z.object({
   whatsapp_number: z.string().optional(),
   address: z.string().optional(),
 });
+
+const optionalMarathiText = z.string().trim().max(5000).nullable().optional();
+const bilingualText = z.object({
+  en: z.string().trim().max(5000).optional(),
+  mr: z.string().trim().max(5000).optional(),
+});
+
+export const businessPayloadSchema = z.object({
+  businessName: z.union([
+    z.string().trim().min(1),
+    bilingualText,
+  ]).optional(),
+  category: z.union([z.string().trim().max(5000), bilingualText]).optional(),
+  ownerName: z.union([z.string().trim().max(5000), bilingualText]).optional(),
+  designation: z.union([z.string().trim().max(5000), bilingualText]).optional(),
+  tagline: z.union([z.string().trim().max(5000), bilingualText]).optional(),
+  about: z.union([z.string().trim().max(5000), bilingualText]).optional(),
+  businessNameMr: optionalMarathiText,
+  categoryMr: optionalMarathiText,
+  ownerNameMr: optionalMarathiText,
+  designationMr: optionalMarathiText,
+  taglineMr: optionalMarathiText,
+  aboutMr: optionalMarathiText,
+}).passthrough();

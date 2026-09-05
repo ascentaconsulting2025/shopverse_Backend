@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createBusinessSchema = exports.sectionVisibilitySchema = void 0;
+exports.businessPayloadSchema = exports.createBusinessSchema = exports.sectionVisibilitySchema = void 0;
 const zod_1 = require("zod");
 exports.sectionVisibilitySchema = zod_1.z.object({
     products: zod_1.z.boolean(),
@@ -16,3 +16,25 @@ exports.createBusinessSchema = zod_1.z.object({
     whatsapp_number: zod_1.z.string().optional(),
     address: zod_1.z.string().optional(),
 });
+const optionalMarathiText = zod_1.z.string().trim().max(5000).nullable().optional();
+const bilingualText = zod_1.z.object({
+    en: zod_1.z.string().trim().max(5000).optional(),
+    mr: zod_1.z.string().trim().max(5000).optional(),
+});
+exports.businessPayloadSchema = zod_1.z.object({
+    businessName: zod_1.z.union([
+        zod_1.z.string().trim().min(1),
+        bilingualText,
+    ]).optional(),
+    category: zod_1.z.union([zod_1.z.string().trim().max(5000), bilingualText]).optional(),
+    ownerName: zod_1.z.union([zod_1.z.string().trim().max(5000), bilingualText]).optional(),
+    designation: zod_1.z.union([zod_1.z.string().trim().max(5000), bilingualText]).optional(),
+    tagline: zod_1.z.union([zod_1.z.string().trim().max(5000), bilingualText]).optional(),
+    about: zod_1.z.union([zod_1.z.string().trim().max(5000), bilingualText]).optional(),
+    businessNameMr: optionalMarathiText,
+    categoryMr: optionalMarathiText,
+    ownerNameMr: optionalMarathiText,
+    designationMr: optionalMarathiText,
+    taglineMr: optionalMarathiText,
+    aboutMr: optionalMarathiText,
+}).passthrough();
