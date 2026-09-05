@@ -7,11 +7,30 @@ import { errorHandler } from './middlewares/errorHandler';
 import routes from './routes';
 
 const app = express();
+const defaultCorsOrigins = [
+  'http://localhost:3000',
+  'https://shopverseindia.ascentaconsulting.in',
+];
+
+const normalizeOrigin = (value: string) => {
+  try {
+    const url = new URL(value.trim());
+    if (!['http:', 'https:'].includes(url.protocol) || url.pathname !== '/' && url.pathname !== '') return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+};
+
+const configuredCorsOrigins = (process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map(normalizeOrigin)
+  .filter((origin): origin is string => origin !== null);
+const allowedCorsOrigins = new Set([...defaultCorsOrigins, ...configuredCorsOrigins]);
 
 app.use(cors({
   origin: (origin, callback) => {
-    const allowed = (process.env.CORS_ORIGIN || 'http://localhost:3000').split(',').map(value => value.trim());
-    if (!origin || allowed.includes(origin)) return callback(null, true);
+    if (!origin || allowedCorsOrigins.has(origin)) return callback(null, true);
     callback(new Error('Origin not allowed by CORS'));
   },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
