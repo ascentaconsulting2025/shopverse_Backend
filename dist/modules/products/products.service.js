@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.productsService = exports.requireProduct = exports.productSelect = void 0;
 const supabaseClient_1 = require("../../config/supabaseClient");
 const apiError_1 = require("../../utils/apiError");
+const cloudinaryAsset_1 = require("../../utils/cloudinaryAsset");
 exports.productSelect = '*';
 const requireProduct = async (id) => {
     const { data, error } = await supabaseClient_1.supabaseAdmin.from('products').select(exports.productSelect).eq('id', id).single();
@@ -31,6 +32,7 @@ exports.productsService = {
             price: input.price,
             original_price: input.originalPrice ?? null,
             image_url: input.image || null,
+            image_public_id: input.imagePublicId || (0, cloudinaryAsset_1.cloudinaryPublicIdFromUrl)(input.image) || null,
             category: input.category?.en || input.category?.mr || null,
             category_en: input.category?.en || null,
             category_mr: input.category?.mr || null,
@@ -57,8 +59,10 @@ exports.productsService = {
             update.price = input.price;
         if (input.originalPrice !== undefined)
             update.original_price = input.originalPrice;
-        if (input.image !== undefined)
+        if (input.image !== undefined) {
             update.image_url = input.image || null;
+            update.image_public_id = input.imagePublicId || (0, cloudinaryAsset_1.cloudinaryPublicIdFromUrl)(input.image) || null;
+        }
         if (input.category !== undefined) {
             update.category = input.category?.en || input.category?.mr || null;
             update.category_en = input.category?.en || null;

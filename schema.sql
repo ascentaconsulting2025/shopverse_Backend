@@ -27,6 +27,7 @@ create table if not exists public.businesses (
   designation_mr text,
   tagline_mr text,
   logo_url text,
+  logo_public_id text,
   phone text,
   whatsapp_number text,
   address text,
@@ -71,6 +72,7 @@ create table if not exists public.products (
   price numeric(12,2) default 0,
   original_price numeric(12,2),
   image_url text,
+  image_public_id text,
   category text,
   category_en text,
   category_mr text,
@@ -108,6 +110,7 @@ create table if not exists public.services (
   details_en text,
   details_mr text,
   cover_image text,
+  cover_image_public_id text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

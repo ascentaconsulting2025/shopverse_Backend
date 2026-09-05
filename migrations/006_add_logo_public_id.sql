@@ -1,0 +1,1 @@
+alter table public.businesses add column if not exists logo_public_id text;

@@ -17,7 +17,7 @@ const toService = (row: any) => ({
   startingPrice: Number(row.starting_price || 0),
   duration: { en: row.duration_en ?? '', mr: row.duration_mr ?? '' },
   category: { en: row.category_en ?? '', mr: row.category_mr ?? '' },
-  image: row.cover_image || '',
+  image: row.cover_image || '', imagePublicId: row.cover_image_public_id || '',
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });

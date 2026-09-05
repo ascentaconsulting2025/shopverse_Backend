@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../../config/supabaseClient';
 import { ApiError } from '../../utils/apiError';
+import { cloudinaryPublicIdFromUrl } from '../../utils/cloudinaryAsset';
 
 export const productSelect = '*';
 
@@ -28,6 +29,7 @@ export const productsService = {
 			price: input.price,
 			original_price: input.originalPrice ?? null,
 			image_url: input.image || null,
+			image_public_id: input.imagePublicId || cloudinaryPublicIdFromUrl(input.image) || null,
 			category: input.category?.en || input.category?.mr || null,
 			category_en: input.category?.en || null,
 			category_mr: input.category?.mr || null,
@@ -43,7 +45,10 @@ export const productsService = {
 		if (input.description !== undefined) { update.description = input.description.en || input.description.mr || null; update.description_en = input.description.en; update.description_mr = input.description.mr; }
 		if (input.price !== undefined) update.price = input.price;
 		if (input.originalPrice !== undefined) update.original_price = input.originalPrice;
-		if (input.image !== undefined) update.image_url = input.image || null;
+		if (input.image !== undefined) {
+			update.image_url = input.image || null;
+			update.image_public_id = input.imagePublicId || cloudinaryPublicIdFromUrl(input.image) || null;
+		}
 		if (input.category !== undefined) { update.category = input.category?.en || input.category?.mr || null; update.category_en = input.category?.en || null; update.category_mr = input.category?.mr || null; }
 		if (input.isAvailable !== undefined) update.is_available = input.isAvailable;
 		if (input.sortOrder !== undefined) update.sort_order = input.sortOrder;

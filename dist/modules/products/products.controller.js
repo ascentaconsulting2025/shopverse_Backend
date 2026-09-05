@@ -18,7 +18,7 @@ const toProduct = (row) => ({
     name: { en: row.name_en ?? row.name ?? '', mr: row.name_mr ?? row.name ?? '' },
     description: { en: row.description_en ?? row.description ?? '', mr: row.description_mr ?? row.description ?? '' },
     price: Number(row.price || 0), originalPrice: row.original_price == null ? undefined : Number(row.original_price),
-    image: row.image_url || '', category: { en: row.category_en ?? row.category ?? '', mr: row.category_mr ?? row.category ?? '' },
+    image: row.image_url || '', imagePublicId: row.image_public_id || '', category: { en: row.category_en ?? row.category ?? '', mr: row.category_mr ?? row.category ?? '' },
     isAvailable: row.is_available ?? true, createdAt: row.created_at, updatedAt: row.updated_at,
 });
 exports.createProduct = (0, asyncHandler_1.asyncHandler)(async (req, res) => {

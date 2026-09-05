@@ -12,6 +12,7 @@ export const createServiceSchema = z.object({
   category: bilingualField.optional().default({ en: '', mr: '' }),
   description: bilingualField.optional().default({ en: '', mr: '' }),
   image: z.string().trim().optional().default(''),
+  imagePublicId: z.string().trim().optional(),
 });
 
 export const updateServiceSchema = createServiceSchema.partial();

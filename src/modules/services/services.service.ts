@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../../config/supabaseClient';
 import { ApiError } from '../../utils/apiError';
+import { cloudinaryPublicIdFromUrl } from '../../utils/cloudinaryAsset';
 
 export const serviceSelect = '*';
 
@@ -35,6 +36,7 @@ export const servicesService = {
       details_en: input.description?.en || null,
       details_mr: input.description?.mr || null,
       cover_image: input.image || null,
+      cover_image_public_id: input.imagePublicId || cloudinaryPublicIdFromUrl(input.image) || null,
     }).select(serviceSelect).single();
     if (error) throw new ApiError(error.message, 400);
     return data;
@@ -61,7 +63,10 @@ export const servicesService = {
       update.details_en = input.description?.en || null;
       update.details_mr = input.description?.mr || null;
     }
-    if (input.image !== undefined) update.cover_image = input.image || null;
+    if (input.image !== undefined) {
+      update.cover_image = input.image || null;
+      update.cover_image_public_id = input.imagePublicId || cloudinaryPublicIdFromUrl(input.image) || null;
+    }
 
     const { data, error } = await supabaseAdmin.from('services').update(update).eq('id', id).select(serviceSelect).single();
     if (error || !data) throw new ApiError(error?.message || 'Service not found', error ? 400 : 404);

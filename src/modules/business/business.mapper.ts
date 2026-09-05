@@ -1,4 +1,6 @@
 
+import { cloudinaryPublicIdFromUrl } from '../../utils/cloudinaryAsset';
+
 const baseStats = { totalViews: 0, uniqueVisitors: 0, whatsappClicks: 0, callClicks: 0, websiteClicks: 0, enquiriesCount: 0, qrScans: 0, directionClicks: 0, vcardDownloads: 0 };
 
 function bilingualValue(value: any, fallback = '') {
@@ -43,6 +45,7 @@ export function toCard(row: any): any {
     whatsapp: details.whatsapp || row.whatsapp_number || '',
     phone: details.phone || row.phone || '',
     logo: details.logo || row.logo_url || '',
+    logoPublicId: details.logoPublicId || row.logo_public_id || '',
     address: details.address || row.address || {},
     socialLinks: details.socialLinks || row.social_links || {},
     status: row.status || (row.is_published ? 'active' : (details.status || 'draft')),
@@ -67,7 +70,9 @@ export function toBusinessWrite(card: Record<string, any>, ownerId?: string, inc
     tagline_mr: nullableMarathi(card.tagline),
     category: category || null, description: typeof card.about === 'object' ? card.about.en || card.about.mr : card.about || null,
     description_mr: nullableMarathi(card.about),
-    logo_url: card.logo || null, ...(includePhone ? { phone: card.phone || null } : {}), whatsapp_number: card.whatsapp || null,
+    logo_url: card.logo || null,
+    logo_public_id: card.logoPublicId || cloudinaryPublicIdFromUrl(card.logo) || null,
+    ...(includePhone ? { phone: card.phone || null } : {}), whatsapp_number: card.whatsapp || null,
     address: card.address || null, social_links: card.socialLinks || null,
     status: card.status || 'draft',
     is_verified: card.isVerified ?? false,

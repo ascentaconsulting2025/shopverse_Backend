@@ -8,6 +8,7 @@ export const createProductSchema = z.object({
   price: z.coerce.number().finite().min(0),
   originalPrice: z.coerce.number().finite().min(0).optional(),
   image: z.string().trim().optional().default(''),
+  imagePublicId: z.string().trim().optional(),
   category: bilingualField.optional(),
   isAvailable: z.boolean(),
   sortOrder: z.number().int().optional(),

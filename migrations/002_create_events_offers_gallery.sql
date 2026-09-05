@@ -5,7 +5,7 @@ create table if not exists public.events (
   description_en text not null default '', description_mr text not null default '',
   event_date text not null, start_time text not null, end_time text not null default '',
   venue_en text not null, venue_mr text not null default '', enquiry_number text not null,
-  website_url text, poster_url text, is_active boolean not null default true,
+  website_url text, poster_url text, poster_public_id text, is_active boolean not null default true,
   created_at timestamptz not null default now(), updated_at timestamptz not null default now(), deleted_at timestamptz
 );
 create index if not exists idx_events_business_date on public.events(business_id, event_date);
@@ -23,7 +23,7 @@ create unique index if not exists idx_offers_business_coupon_active on public.of
 
 create table if not exists public.gallery_photos (
   id uuid primary key default gen_random_uuid(), business_id uuid not null references public.businesses(id) on delete cascade,
-  event_id uuid references public.events(id) on delete set null, image_url text not null, caption text not null default '', category text not null default '',
+  event_id uuid references public.events(id) on delete set null, image_url text not null, image_public_id text, caption text not null default '', category text not null default '',
   sort_order integer not null default 0, is_active boolean not null default true, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), deleted_at timestamptz
 );
 create index if not exists idx_gallery_business_sort on public.gallery_photos(business_id, sort_order, created_at desc);

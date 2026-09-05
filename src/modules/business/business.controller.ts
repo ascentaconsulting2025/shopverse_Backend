@@ -40,7 +40,7 @@ const toService = (row: any) => ({
   startingPrice: Number(row.starting_price || 0),
   duration: { en: row.duration_en ?? '', mr: row.duration_mr ?? '' },
   category: { en: row.category_en ?? '', mr: row.category_mr ?? '' },
-  image: row.cover_image || '',
+  image: row.cover_image || '', imagePublicId: row.cover_image_public_id || '',
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -51,16 +51,16 @@ const toProduct = (row: any) => ({
   description: { en: row.description_en ?? row.description ?? '', mr: row.description_mr ?? row.description ?? '' },
   price: Number(row.price || 0),
   originalPrice: row.original_price == null ? undefined : Number(row.original_price),
-  image: row.image_url || '',
+  image: row.image_url || '', imagePublicId: row.image_public_id || '',
   category: { en: row.category_en ?? row.category ?? '', mr: row.category_mr ?? row.category ?? '' },
   isAvailable: row.is_available ?? true,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
 
-const toEvent = (row: any) => ({ id: row.id, title: { en: row.event_name_en, mr: row.event_name_mr }, eventName: { en: row.event_name_en, mr: row.event_name_mr }, description: { en: row.description_en, mr: row.description_mr }, date: row.event_date, time: row.start_time, venue: { en: row.venue_en, mr: row.venue_mr }, enquiryNo: row.enquiry_number, eventLink: row.website_url || '', photo: row.poster_url || '', image: row.poster_url || '', isActive: row.is_active });
+const toEvent = (row: any) => ({ id: row.id, title: { en: row.event_name_en, mr: row.event_name_mr }, eventName: { en: row.event_name_en, mr: row.event_name_mr }, description: { en: row.description_en, mr: row.description_mr }, date: row.event_date, time: row.start_time, venue: { en: row.venue_en, mr: row.venue_mr }, enquiryNo: row.enquiry_number, eventLink: row.website_url || '', photo: row.poster_url || '', image: row.poster_url || '', imagePublicId: row.poster_public_id || '', isActive: row.is_active });
 const toOffer = (row: any) => ({ id: row.id, title: { en: row.offer_title_en, mr: row.offer_title_mr }, description: { en: row.terms_en, mr: row.terms_mr }, discountBadge: { en: row.discount_badge_en, mr: row.discount_badge_mr }, discountPercentage: row.discount_percentage == null ? undefined : Number(row.discount_percentage), couponCode: row.coupon_code, validUntil: { en: row.validity_en, mr: row.validity_mr }, isActive: row.is_active });
-const toGallery = (row: any) => ({ id: row.id, url: row.image_url, imageUrl: row.image_url, caption: row.caption, category: row.category, sortOrder: row.sort_order, isActive: row.is_active });
+const toGallery = (row: any) => ({ id: row.id, url: row.image_url, imageUrl: row.image_url, imagePublicId: row.image_public_id || '', caption: row.caption, category: row.category, sortOrder: row.sort_order, isActive: row.is_active });
 
 async function loadProducts(businessId: string) {
   const { data, error } = await supabaseAdmin.from('products').select('*').eq('business_id', businessId).order('sort_order').order('created_at', { ascending: false });
