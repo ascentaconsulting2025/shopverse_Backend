@@ -35,6 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const controller = __importStar(require("./inquiries.controller"));
+const rateLimiter_1 = require("../../middlewares/rateLimiter");
 const router = (0, express_1.Router)();
-router.post('/:businessId/inquiries', controller.createInquiry);
+router.post('/:businessId/inquiries', rateLimiter_1.publicRateLimiter, controller.createInquiry);
 exports.default = router;

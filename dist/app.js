@@ -11,7 +11,16 @@ const express_2 = require("express");
 const errorHandler_1 = require("./middlewares/errorHandler");
 const routes_1 = __importDefault(require("./routes"));
 const app = (0, express_1.default)();
-app.use((0, cors_1.default)());
+app.use((0, cors_1.default)({
+    origin: (origin, callback) => {
+        const allowed = (process.env.CORS_ORIGIN || 'http://localhost:3000').split(',').map(value => value.trim());
+        if (!origin || allowed.includes(origin))
+            return callback(null, true);
+        callback(new Error('Origin not allowed by CORS'));
+    },
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 app.use((0, helmet_1.default)());
 app.use((0, morgan_1.default)('dev'));
 app.use((0, express_2.json)());

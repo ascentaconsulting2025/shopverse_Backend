@@ -21,14 +21,27 @@ create table if not exists public.businesses (
   category text,
   description text,
   logo_url text,
+  phone text,
   whatsapp_number text,
   address text,
   social_links jsonb,
   qr_code_url text,
+  details jsonb not null default '{}'::jsonb,
+  status text not null default 'draft',
+  is_verified boolean not null default false,
+  plan_id text not null default 'free',
   is_published boolean default false,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+
+-- Existing installations: add the field used to preserve the complete card model.
+alter table public.businesses add column if not exists details jsonb not null default '{}'::jsonb;
+alter table public.businesses add column if not exists phone text;
+alter table public.businesses add column if not exists status text not null default 'draft';
+alter table public.businesses add column if not exists is_verified boolean not null default false;
+alter table public.businesses add column if not exists plan_id text not null default 'free';
+update public.businesses set status = case when is_published then 'active' else coalesce(nullif(details->>'status', ''), 'draft') end where status is null or status = 'draft';
 
 -- Unique slug
 create unique index if not exists idx_businesses_slug on public.businesses(slug);
@@ -38,18 +51,56 @@ create table if not exists public.products (
   id uuid primary key default gen_random_uuid(),
   business_id uuid not null references public.businesses(id) on delete cascade,
   name text not null,
+  name_en text,
+  name_mr text,
   description text,
+  description_en text,
+  description_mr text,
   price numeric(12,2) default 0,
+  original_price numeric(12,2),
   image_url text,
   category text,
+  category_en text,
+  category_mr text,
   is_available boolean default true,
   sort_order int default 0,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
 
+-- Product fields added after the initial single-language product schema.
+alter table public.products add column if not exists name_en text;
+alter table public.products add column if not exists name_mr text;
+alter table public.products add column if not exists description_en text;
+alter table public.products add column if not exists description_mr text;
+alter table public.products add column if not exists original_price numeric(12,2);
+alter table public.products add column if not exists category_en text;
+alter table public.products add column if not exists category_mr text;
+
 -- Composite index for product list queries
 create index if not exists idx_products_business_available on public.products(business_id, is_available);
+
+-- Services
+create table if not exists public.services (
+  id uuid primary key default gen_random_uuid(),
+  business_id uuid not null references public.businesses(id) on delete cascade,
+  name text not null,
+  name_en text not null,
+  name_mr text not null,
+  starting_price numeric(12,2) not null check (starting_price >= 0),
+  duration_en text,
+  duration_mr text,
+  category_en text,
+  category_mr text,
+  details text,
+  details_en text,
+  details_mr text,
+  cover_image text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_services_business_created on public.services(business_id, created_at desc);
 
 -- Inquiries
 create table if not exists public.inquiries (
@@ -119,6 +170,36 @@ create policy "Products: owner delete" on public.products
 create policy "Products: public select when business published" on public.products
   for select using (
     exists (select 1 from public.businesses b where b.id = public.products.business_id and b.is_published = true)
+  );
+
+-- Services RLS
+alter table public.services enable row level security;
+
+create policy "Services: owner select" on public.services
+  for select using (
+    exists (select 1 from public.businesses b where b.id = public.services.business_id and b.owner_id = auth.uid())
+  );
+
+create policy "Services: owner insert" on public.services
+  for insert with check (
+    exists (select 1 from public.businesses b where b.id = public.services.business_id and b.owner_id = auth.uid())
+  );
+
+create policy "Services: owner update" on public.services
+  for update using (
+    exists (select 1 from public.businesses b where b.id = public.services.business_id and b.owner_id = auth.uid())
+  ) with check (
+    exists (select 1 from public.businesses b where b.id = public.services.business_id and b.owner_id = auth.uid())
+  );
+
+create policy "Services: owner delete" on public.services
+  for delete using (
+    exists (select 1 from public.businesses b where b.id = public.services.business_id and b.owner_id = auth.uid())
+  );
+
+create policy "Services: public select when business published" on public.services
+  for select using (
+    exists (select 1 from public.businesses b where b.id = public.services.business_id and b.is_published = true)
   );
 
 -- Inquiries RLS

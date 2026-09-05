@@ -35,8 +35,10 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const controller = __importStar(require("./auth.controller"));
+const validateRequest_1 = require("../../middlewares/validateRequest");
+const auth_schema_1 = require("./auth.schema");
 const router = (0, express_1.Router)();
-router.post('/register', controller.register);
-router.post('/login', controller.login);
+router.post('/register', (0, validateRequest_1.validateRequest)(auth_schema_1.registerSchema), controller.register);
+router.post('/login', (0, validateRequest_1.validateRequest)(auth_schema_1.loginSchema), controller.login);
 router.post('/logout', controller.logout);
 exports.default = router;

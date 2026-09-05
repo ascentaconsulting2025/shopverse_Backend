@@ -1,19 +1,44 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteProduct = exports.updateProduct = exports.listProducts = exports.createProduct = void 0;
-const createProduct = async (req, res, next) => {
-    res.json({ success: true, data: { message: 'create product stub' } });
+exports.deleteProduct = exports.updateProduct = exports.getProduct = exports.listProducts = exports.createProduct = void 0;
+const asyncHandler_1 = require("../../utils/asyncHandler");
+const apiError_1 = require("../../utils/apiError");
+const apiResponse_1 = require("../../utils/apiResponse");
+const supabaseClient_1 = require("../../config/supabaseClient");
+const products_service_1 = require("./products.service");
+const requireBusinessOwner = async (businessId, userId, isAdmin = false) => {
+    const { data } = await supabaseClient_1.supabaseAdmin.from('businesses').select('id, owner_id').eq('id', businessId).single();
+    if (!data)
+        throw new apiError_1.ApiError('Business not found', 404);
+    if (data.owner_id !== userId && !isAdmin)
+        throw new apiError_1.ApiError('You do not own this business', 403);
 };
-exports.createProduct = createProduct;
-const listProducts = async (req, res, next) => {
-    res.json({ success: true, data: { message: 'list products stub' } });
-};
-exports.listProducts = listProducts;
-const updateProduct = async (req, res, next) => {
-    res.json({ success: true, data: { message: 'update product stub' } });
-};
-exports.updateProduct = updateProduct;
-const deleteProduct = async (req, res, next) => {
-    res.json({ success: true, data: { message: 'delete product stub' } });
-};
-exports.deleteProduct = deleteProduct;
+const toProduct = (row) => ({
+    id: row.id,
+    name: { en: row.name_en ?? row.name ?? '', mr: row.name_mr ?? row.name ?? '' },
+    description: { en: row.description_en ?? row.description ?? '', mr: row.description_mr ?? row.description ?? '' },
+    price: Number(row.price || 0), originalPrice: row.original_price == null ? undefined : Number(row.original_price),
+    image: row.image_url || '', category: { en: row.category_en ?? row.category ?? '', mr: row.category_mr ?? row.category ?? '' },
+    isAvailable: row.is_available ?? true, createdAt: row.created_at, updatedAt: row.updated_at,
+});
+exports.createProduct = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    await requireBusinessOwner(req.params.businessId, req.user.id, req.isAdmin);
+    res.status(201).json((0, apiResponse_1.apiSuccess)(toProduct(await products_service_1.productsService.create(req.params.businessId, req.body))));
+});
+exports.listProducts = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    res.json((0, apiResponse_1.apiSuccess)((await products_service_1.productsService.list(req.params.businessId)).map(toProduct)));
+});
+exports.getProduct = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    res.json((0, apiResponse_1.apiSuccess)(toProduct(await (0, products_service_1.requireProduct)(req.params.id))));
+});
+exports.updateProduct = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    const existing = await (0, products_service_1.requireProduct)(req.params.id);
+    await requireBusinessOwner(existing.business_id, req.user.id, req.isAdmin);
+    res.json((0, apiResponse_1.apiSuccess)(toProduct(await products_service_1.productsService.update(req.params.id, req.body))));
+});
+exports.deleteProduct = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    const existing = await (0, products_service_1.requireProduct)(req.params.id);
+    await requireBusinessOwner(existing.business_id, req.user.id, req.isAdmin);
+    await products_service_1.productsService.remove(req.params.id);
+    res.status(204).send();
+});

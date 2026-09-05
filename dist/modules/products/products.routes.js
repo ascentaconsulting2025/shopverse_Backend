@@ -35,9 +35,13 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const controller = __importStar(require("./products.controller"));
+const authGuard_1 = require("../../middlewares/authGuard");
+const validateRequest_1 = require("../../middlewares/validateRequest");
+const products_schema_1 = require("./products.schema");
 const router = (0, express_1.Router)();
-router.post('/:businessId/products', controller.createProduct);
+router.post('/:businessId/products', authGuard_1.authGuard, (0, validateRequest_1.validateRequest)(products_schema_1.createProductSchema), controller.createProduct);
 router.get('/:businessId/products', controller.listProducts);
-router.patch('/products/:id', controller.updateProduct);
-router.delete('/products/:id', controller.deleteProduct);
+router.get('/products/:id', controller.getProduct);
+router.patch('/products/:id', authGuard_1.authGuard, (0, validateRequest_1.validateRequest)(products_schema_1.updateProductSchema), controller.updateProduct);
+router.delete('/products/:id', authGuard_1.authGuard, controller.deleteProduct);
 exports.default = router;

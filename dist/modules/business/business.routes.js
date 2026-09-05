@@ -35,8 +35,14 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const controller = __importStar(require("./business.controller"));
+const authGuard_1 = require("../../middlewares/authGuard");
 const router = (0, express_1.Router)();
-router.post('/', controller.createBusiness);
+router.get('/mine', authGuard_1.authGuard, controller.listMyBusinesses);
+router.post('/', authGuard_1.authGuard, controller.createBusiness);
+router.get('/:id/section-visibility', authGuard_1.authGuard, controller.getSectionVisibility);
+router.patch('/:id/section-visibility', authGuard_1.authGuard, controller.updateSectionVisibility);
+router.get('/:id/usage', authGuard_1.authGuard, controller.getBusinessUsage);
 router.get('/:slug', controller.getBusinessBySlug);
-router.patch('/:id', controller.updateBusiness);
+router.patch('/:id', authGuard_1.authGuard, controller.updateBusiness);
+router.delete('/:id', authGuard_1.authGuard, controller.deleteBusiness);
 exports.default = router;
