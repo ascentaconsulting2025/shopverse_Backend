@@ -135,6 +135,15 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
   }));
 });
 
+export const getBusinessCount = asyncHandler(async (_req, res) => {
+  const { count, error } = await supabaseAdmin
+    .from('businesses')
+    .select('id', { count: 'exact', head: true })
+    .eq('is_published', true);
+  if (error) throw new ApiError(error.message, 400);
+  res.json(apiSuccess({ count: count || 0 }));
+});
+
 export const updateBusiness = asyncHandler(async (req, res) => {
   const user = (req as any).user;
   const { data: current, error: findError } = await supabaseAdmin.from('businesses').select('*').eq('id', req.params.id).single();
