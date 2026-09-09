@@ -9,7 +9,7 @@ import routes from './routes';
 const app = express();
 const defaultCorsOrigins = [
   'http://localhost:3000',
-  'https://shopverseindia.ascentaconsulting.in',
+  'https://iidentity.ascentaconsulting.in',
 ];
 
 const normalizeOrigin = (value: string) => {
