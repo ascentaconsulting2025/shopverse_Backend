@@ -13,7 +13,7 @@ const routes_1 = __importDefault(require("./routes"));
 const app = (0, express_1.default)();
 const defaultCorsOrigins = [
     'http://localhost:3000',
-    'https://iidentity.ascentaconsulting.in',
+    'https://1identity.ascentaconsulting.in',
 ];
 const normalizeOrigin = (value) => {
     try {

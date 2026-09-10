@@ -17,12 +17,12 @@ async function findOrCreateOwner() {
   let user = users.users.find(item => item.email?.toLowerCase() === demoEmail.toLowerCase());
   if (!user) {
     const created = await supabaseAdmin.auth.admin.createUser({
-      email: demoEmail, password: demoPassword, email_confirm: true, user_metadata: { full_name: 'One Identity Demo Owner' },
+      email: demoEmail, password: demoPassword, email_confirm: true, user_metadata: { full_name: '1Identity Demo Owner' },
     });
     if (created.error || !created.data.user) throw created.error || new Error('Could not create demo owner');
     user = created.data.user;
   }
-  const { error: profileError } = await supabaseAdmin.from('profiles').upsert({ id: user.id, full_name: 'One Identity Demo Owner' });
+  const { error: profileError } = await supabaseAdmin.from('profiles').upsert({ id: user.id, full_name: '1Identity Demo Owner' });
   if (profileError) {
     if (profileError.code === 'PGRST205') {
       throw new Error('Database schema is not installed. Run schema.sql in Supabase Dashboard → SQL Editor, then run `yarn seed:demo` again.');

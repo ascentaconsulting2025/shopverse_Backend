@@ -40,6 +40,7 @@ const validateRequest_1 = require("../../middlewares/validateRequest");
 const business_schema_1 = require("./business.schema");
 const router = (0, express_1.Router)();
 router.get('/mine', authGuard_1.authGuard, controller.listMyBusinesses);
+router.get('/count', controller.getBusinessCount);
 router.post('/', authGuard_1.authGuard, (0, validateRequest_1.validateRequest)(business_schema_1.businessPayloadSchema), controller.createBusiness);
 router.get('/:id/section-visibility', authGuard_1.authGuard, controller.getSectionVisibility);
 router.patch('/:id/section-visibility', authGuard_1.authGuard, controller.updateSectionVisibility);

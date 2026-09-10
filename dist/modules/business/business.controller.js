@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getBusinessUsage = exports.updateSectionVisibility = exports.getSectionVisibility = exports.listMyBusinesses = exports.deleteBusiness = exports.updateBusiness = exports.getBusinessBySlug = exports.createBusiness = void 0;
+exports.getBusinessUsage = exports.updateSectionVisibility = exports.getSectionVisibility = exports.listMyBusinesses = exports.deleteBusiness = exports.updateBusiness = exports.getBusinessCount = exports.getBusinessBySlug = exports.createBusiness = void 0;
 const asyncHandler_1 = require("../../utils/asyncHandler");
 const apiError_1 = require("../../utils/apiError");
 const apiResponse_1 = require("../../utils/apiResponse");
@@ -126,6 +126,15 @@ exports.getBusinessBySlug = (0, asyncHandler_1.asyncHandler)(async (req, res) =>
         ...(services ? { services: services.map(toService) } : {}),
         events: content.events.map(toEvent), offers: content.offers.map(toOffer), gallery: content.gallery.map(toGallery),
     }));
+});
+exports.getBusinessCount = (0, asyncHandler_1.asyncHandler)(async (_req, res) => {
+    const { count, error } = await supabaseClient_1.supabaseAdmin
+        .from('businesses')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_published', true);
+    if (error)
+        throw new apiError_1.ApiError(error.message, 400);
+    res.json((0, apiResponse_1.apiSuccess)({ count: count || 0 }));
 });
 exports.updateBusiness = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const user = req.user;
