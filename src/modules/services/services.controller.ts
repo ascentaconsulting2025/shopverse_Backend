@@ -3,6 +3,7 @@ import { ApiError } from '../../utils/apiError';
 import { apiSuccess } from '../../utils/apiResponse';
 import { supabaseAdmin } from '../../config/supabaseClient';
 import { requireService, servicesService } from './services.service';
+import { cloudinaryPublicIdFromUrl, deleteCloudinaryImage } from '../../utils/cloudinaryAsset';
 
 const requireBusinessOwner = async (businessId: string, userId: string, isAdmin = false) => {
   const { data } = await supabaseAdmin.from('businesses').select('id, owner_id').eq('id', businessId).single();
@@ -38,12 +39,19 @@ export const getService = asyncHandler(async (req, res) => {
 export const updateService = asyncHandler(async (req, res) => {
   const existing = await requireService(req.params.id);
   await requireBusinessOwner(existing.business_id, (req as any).user.id, (req as any).isAdmin);
+  if (req.body.image !== undefined) {
+    const nextPublicId = req.body.imagePublicId || cloudinaryPublicIdFromUrl(req.body.image);
+    if (existing.cover_image_public_id && existing.cover_image_public_id !== nextPublicId) {
+      await deleteCloudinaryImage(existing.cover_image_public_id, existing.id);
+    }
+  }
   res.json(apiSuccess(toService(await servicesService.update(req.params.id, req.body))));
 });
 
 export const deleteService = asyncHandler(async (req, res) => {
   const existing = await requireService(req.params.id);
   await requireBusinessOwner(existing.business_id, (req as any).user.id, (req as any).isAdmin);
+  await deleteCloudinaryImage(existing.cover_image_public_id, existing.id);
   await servicesService.remove(req.params.id);
   res.status(204).send();
 });

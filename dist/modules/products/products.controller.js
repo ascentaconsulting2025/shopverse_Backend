@@ -6,6 +6,7 @@ const apiError_1 = require("../../utils/apiError");
 const apiResponse_1 = require("../../utils/apiResponse");
 const supabaseClient_1 = require("../../config/supabaseClient");
 const products_service_1 = require("./products.service");
+const cloudinaryAsset_1 = require("../../utils/cloudinaryAsset");
 const requireBusinessOwner = async (businessId, userId, isAdmin = false) => {
     const { data } = await supabaseClient_1.supabaseAdmin.from('businesses').select('id, owner_id').eq('id', businessId).single();
     if (!data)
@@ -34,11 +35,18 @@ exports.getProduct = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
 exports.updateProduct = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const existing = await (0, products_service_1.requireProduct)(req.params.id);
     await requireBusinessOwner(existing.business_id, req.user.id, req.isAdmin);
+    if (req.body.image !== undefined) {
+        const nextPublicId = req.body.imagePublicId || (0, cloudinaryAsset_1.cloudinaryPublicIdFromUrl)(req.body.image);
+        if (existing.image_public_id && existing.image_public_id !== nextPublicId) {
+            await (0, cloudinaryAsset_1.deleteCloudinaryImage)(existing.image_public_id, existing.id);
+        }
+    }
     res.json((0, apiResponse_1.apiSuccess)(toProduct(await products_service_1.productsService.update(req.params.id, req.body))));
 });
 exports.deleteProduct = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const existing = await (0, products_service_1.requireProduct)(req.params.id);
     await requireBusinessOwner(existing.business_id, req.user.id, req.isAdmin);
+    await (0, cloudinaryAsset_1.deleteCloudinaryImage)(existing.image_public_id, existing.id);
     await products_service_1.productsService.remove(req.params.id);
     res.status(204).send();
 });

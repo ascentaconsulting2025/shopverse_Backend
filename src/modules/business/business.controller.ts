@@ -5,6 +5,7 @@ import { supabaseAdmin } from '../../config/supabaseClient';
 import { toBusinessWrite, toCard } from './business.mapper';
 import { slugify, uniqueSuffix } from '../../utils/generateSlug';
 import { sectionVisibilitySchema } from './business.schema';
+import { deleteCloudinaryImage } from '../../utils/cloudinaryAsset';
 
 const toVisibility = (row: any) => ({
   products: row?.products ?? true,
@@ -150,6 +151,10 @@ export const updateBusiness = asyncHandler(async (req, res) => {
   if (findError || !current) throw new ApiError('Business not found', 404);
   if (current.owner_id !== user.id && !(req as any).isAdmin) throw new ApiError('You do not own this business', 403);
   const merged = { ...toCard(current), ...req.body, id: current.id, slug: current.slug };
+  const nextLogoPublicId = toBusinessWrite(merged).logo_public_id;
+  if (current.logo_public_id && current.logo_public_id !== nextLogoPublicId) {
+    await deleteCloudinaryImage(current.logo_public_id, current.id);
+  }
   const { data, error } = await saveBusiness(current.id, merged);
   if (error) throw new ApiError(error.message, 400);
   res.json(apiSuccess(toCard(data)));
@@ -159,11 +164,27 @@ export const deleteBusiness = asyncHandler(async (req, res) => {
   const user = (req as any).user;
   const { data: current, error: findError } = await supabaseAdmin
     .from('businesses')
-    .select('id, owner_id')
+    .select('id, owner_id, logo_public_id')
     .eq('id', req.params.id)
     .single();
   if (findError || !current) throw new ApiError('Business not found', 404);
   if (current.owner_id !== user.id && !(req as any).isAdmin) throw new ApiError('You do not own this business', 403);
+
+  const [products, services, events, gallery] = await Promise.all([
+    supabaseAdmin.from('products').select('id, image_public_id').eq('business_id', current.id),
+    supabaseAdmin.from('services').select('id, cover_image_public_id').eq('business_id', current.id),
+    supabaseAdmin.from('events').select('id, poster_public_id').eq('business_id', current.id),
+    supabaseAdmin.from('gallery_photos').select('id, image_public_id').eq('business_id', current.id),
+  ]);
+  const childQueryError = [products, services, events, gallery].find((result) => result.error)?.error;
+  if (childQueryError) throw new ApiError(childQueryError.message, 400);
+  await Promise.all([
+    deleteCloudinaryImage(current.logo_public_id, current.id),
+    ...(products.data || []).map((row) => deleteCloudinaryImage(row.image_public_id, row.id)),
+    ...(services.data || []).map((row) => deleteCloudinaryImage(row.cover_image_public_id, row.id)),
+    ...(events.data || []).map((row) => deleteCloudinaryImage(row.poster_public_id, row.id)),
+    ...(gallery.data || []).map((row) => deleteCloudinaryImage(row.image_public_id, row.id)),
+  ]);
 
   const { error } = await supabaseAdmin.from('businesses').delete().eq('id', current.id);
   if (error) throw new ApiError(error.message, 400);

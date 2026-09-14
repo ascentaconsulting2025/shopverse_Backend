@@ -3,6 +3,7 @@ import { ApiError } from '../../utils/apiError';
 import { apiSuccess } from '../../utils/apiResponse';
 import { supabaseAdmin } from '../../config/supabaseClient';
 import { contentService, requireContent } from './content.service';
+import { cloudinaryPublicIdFromUrl, deleteCloudinaryImage } from '../../utils/cloudinaryAsset';
 
 type Kind = 'events' | 'offers' | 'gallery';
 const requireOwner = async (businessId: string, req: any) => {
@@ -15,6 +16,25 @@ export const makeContentController = (kind: Kind) => ({
   create: asyncHandler(async (req, res) => { await requireOwner(req.params.businessId, req); res.status(201).json(apiSuccess(mapRow(kind, await contentService.create(kind, req.params.businessId, req.body)))); }),
   list: asyncHandler(async (req, res) => { const result = await contentService.list(kind, req.params.businessId, req.query); res.json(apiSuccess({ ...result, items: result.items.map(row => mapRow(kind, row)) })); }),
   get: asyncHandler(async (req, res) => res.json(apiSuccess(mapRow(kind, await requireContent(kind, req.params.id))))),
-  update: asyncHandler(async (req, res) => { const current = await requireContent(kind, req.params.id); await requireOwner(current.business_id, req); res.json(apiSuccess(mapRow(kind, await contentService.update(kind, req.params.id, req.body)))); }),
-  remove: asyncHandler(async (req, res) => { const current = await requireContent(kind, req.params.id); await requireOwner(current.business_id, req); await contentService.remove(kind, req.params.id); res.status(204).send(); }),
+  update: asyncHandler(async (req, res) => {
+    const current = await requireContent(kind, req.params.id);
+    await requireOwner(current.business_id, req);
+    const imageField = kind === 'events' ? req.body.photo ?? req.body.image : kind === 'gallery' ? req.body.url ?? req.body.imageUrl : undefined;
+    if (imageField !== undefined) {
+      const nextPublicId = req.body.imagePublicId || cloudinaryPublicIdFromUrl(imageField);
+      const currentPublicId = kind === 'events' ? current.poster_public_id : current.image_public_id;
+      if (currentPublicId && currentPublicId !== nextPublicId) {
+        await deleteCloudinaryImage(currentPublicId, current.id);
+      }
+    }
+    res.json(apiSuccess(mapRow(kind, await contentService.update(kind, req.params.id, req.body))));
+  }),
+  remove: asyncHandler(async (req, res) => {
+    const current = await requireContent(kind, req.params.id);
+    await requireOwner(current.business_id, req);
+    const publicId = kind === 'events' ? current.poster_public_id : kind === 'gallery' ? current.image_public_id : null;
+    await deleteCloudinaryImage(publicId, current.id);
+    await contentService.remove(kind, req.params.id);
+    res.status(204).send();
+  }),
 });
