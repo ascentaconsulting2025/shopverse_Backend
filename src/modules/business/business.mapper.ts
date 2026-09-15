@@ -19,6 +19,10 @@ function nullableMarathi(value: any) {
 
 export function toCard(row: any): any {
   const details = row.details || {};
+  const socialLinks = {
+    ...(details.socialLinks && typeof details.socialLinks === 'object' && !Array.isArray(details.socialLinks) ? details.socialLinks : {}),
+    ...(row.social_links && typeof row.social_links === 'object' && !Array.isArray(row.social_links) ? row.social_links : {}),
+  };
   const businessName = bilingualValue(details.businessName || row.business_name);
   const category = bilingualValue(details.category || row.category);
   const about = bilingualValue(details.about || row.description);
@@ -47,7 +51,7 @@ export function toCard(row: any): any {
     logo: details.logo || row.logo_url || '',
     logoPublicId: details.logoPublicId || row.logo_public_id || '',
     address: details.address || row.address || {},
-    socialLinks: details.socialLinks || row.social_links || {},
+    socialLinks,
     status: row.status || (row.is_published ? 'active' : (details.status || 'draft')),
     isVerified: row.is_verified ?? details.isVerified ?? false,
     planId: row.plan_id || details.planId || 'free',
