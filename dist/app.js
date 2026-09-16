@@ -13,6 +13,8 @@ const routes_1 = __importDefault(require("./routes"));
 const app = (0, express_1.default)();
 const defaultCorsOrigins = [
     'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:3002',
     'https://www.1identity.in',
 ];
 const normalizeOrigin = (value) => {

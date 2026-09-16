@@ -13,8 +13,17 @@ function bilingualValue(value: any, fallback = '') {
 function nullableMarathi(value: any) {
   if (value === undefined) return undefined;
   if (value === null) return null;
-  const text = typeof value === 'object' ? value.mr : value;
-  return typeof text === 'string' && text.trim() ? text.trim() : null;
+  const text = typeof value === 'object' ? plainText(value.mr) : value;
+  return text.trim() ? text.trim() : null;
+}
+
+function plainText(value: any): string {
+  if (typeof value === 'string') return value;
+  if (!value || typeof value !== 'object' || !Array.isArray(value.children)) return '';
+  return value.children.map((block: any) => {
+    if (block.type === 'paragraph') return (block.children || []).map((mark: any) => mark.text || '').join('');
+    return (block.children || []).map((item: any) => (item.children || []).map((mark: any) => mark.text || '').join('')).join('\n');
+  }).join('\n');
 }
 
 export function toCard(row: any): any {
@@ -31,7 +40,7 @@ export function toCard(row: any): any {
   const tagline = bilingualValue(details.tagline);
   if (row.business_name_mr) businessName.mr = row.business_name_mr;
   if (row.category_mr) category.mr = row.category_mr;
-  if (row.description_mr) about.mr = row.description_mr;
+  if (row.description_mr && typeof about.mr !== 'object') about.mr = row.description_mr;
   if (row.owner_name_mr) ownerName.mr = row.owner_name_mr;
   if (row.designation_mr) designation.mr = row.designation_mr;
   if (row.tagline_mr) tagline.mr = row.tagline_mr;
@@ -72,7 +81,7 @@ export function toBusinessWrite(card: Record<string, any>, ownerId?: string, inc
     owner_name_mr: nullableMarathi(card.ownerName),
     designation_mr: nullableMarathi(card.designation),
     tagline_mr: nullableMarathi(card.tagline),
-    category: category || null, description: typeof card.about === 'object' ? card.about.en || card.about.mr : card.about || null,
+    category: category || null, description: plainText(typeof card.about === 'object' ? card.about.en : card.about) || plainText(typeof card.about === 'object' ? card.about.mr : '' ) || null,
     description_mr: nullableMarathi(card.about),
     logo_url: card.logo || null,
     logo_public_id: card.logoPublicId || cloudinaryPublicIdFromUrl(card.logo) || null,

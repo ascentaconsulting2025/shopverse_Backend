@@ -31,6 +31,33 @@ const bilingualText = zod_1.z.object({
     en: zod_1.z.string().trim().max(5000).optional(),
     mr: zod_1.z.string().trim().max(5000).optional(),
 });
+const richTextMark = zod_1.z.object({
+    text: zod_1.z.string().max(5000),
+    bold: zod_1.z.boolean().optional(),
+}).strict();
+const unorderedListStyles = zod_1.z.enum(['disc', 'circle', 'square']);
+const orderedListStyles = zod_1.z.enum(['decimal', 'lower-alpha', 'upper-alpha', 'lower-roman', 'upper-roman']);
+const richTextListItem = zod_1.z.object({
+    type: zod_1.z.literal('list-item'),
+    children: zod_1.z.array(richTextMark).max(5000),
+}).strict();
+const richTextParagraph = zod_1.z.object({
+    type: zod_1.z.literal('paragraph'),
+    children: zod_1.z.array(richTextMark).max(5000),
+}).strict();
+const richTextList = zod_1.z.union([
+    zod_1.z.object({ type: zod_1.z.literal('unordered-list'), style: unorderedListStyles, children: zod_1.z.array(richTextListItem).max(5000) }).strict(),
+    zod_1.z.object({ type: zod_1.z.literal('ordered-list'), style: orderedListStyles, children: zod_1.z.array(richTextListItem).max(5000) }).strict(),
+]);
+const richTextDocument = zod_1.z.object({
+    type: zod_1.z.literal('doc'),
+    children: zod_1.z.array(zod_1.z.union([richTextParagraph, richTextList])).max(5000),
+}).strict().refine((document) => JSON.stringify(document).length <= 20000, 'About content is too large');
+const richTextValue = zod_1.z.union([zod_1.z.string().trim().max(5000), richTextDocument]);
+const richBilingualText = zod_1.z.object({
+    en: richTextValue,
+    mr: richTextValue,
+}).strict();
 exports.businessPayloadSchema = zod_1.z.object({
     businessName: zod_1.z.union([
         zod_1.z.string().trim().min(1),
@@ -40,7 +67,7 @@ exports.businessPayloadSchema = zod_1.z.object({
     ownerName: zod_1.z.union([zod_1.z.string().trim().max(5000), bilingualText]).optional(),
     designation: zod_1.z.union([zod_1.z.string().trim().max(5000), bilingualText]).optional(),
     tagline: zod_1.z.union([zod_1.z.string().trim().max(5000), bilingualText]).optional(),
-    about: zod_1.z.union([zod_1.z.string().trim().max(5000), bilingualText]).optional(),
+    about: zod_1.z.union([zod_1.z.string().trim().max(5000), bilingualText, richBilingualText]).optional(),
     socialLinks: socialLinksSchema.optional(),
     businessNameMr: optionalMarathiText,
     categoryMr: optionalMarathiText,

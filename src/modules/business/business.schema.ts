@@ -36,6 +36,37 @@ const bilingualText = z.object({
   mr: z.string().trim().max(5000).optional(),
 });
 
+const richTextMark = z.object({
+  text: z.string().max(5000),
+  bold: z.boolean().optional(),
+}).strict();
+
+const unorderedListStyles = z.enum(['disc', 'circle', 'square']);
+const orderedListStyles = z.enum(['decimal', 'lower-alpha', 'upper-alpha', 'lower-roman', 'upper-roman']);
+const richTextListItem = z.object({
+  type: z.literal('list-item'),
+  children: z.array(richTextMark).max(5000),
+}).strict();
+const richTextParagraph = z.object({
+  type: z.literal('paragraph'),
+  children: z.array(richTextMark).max(5000),
+}).strict();
+const richTextList = z.union([
+  z.object({ type: z.literal('unordered-list'), style: unorderedListStyles, children: z.array(richTextListItem).max(5000) }).strict(),
+  z.object({ type: z.literal('ordered-list'), style: orderedListStyles, children: z.array(richTextListItem).max(5000) }).strict(),
+]);
+
+const richTextDocument = z.object({
+  type: z.literal('doc'),
+  children: z.array(z.union([richTextParagraph, richTextList])).max(5000),
+}).strict().refine((document) => JSON.stringify(document).length <= 20000, 'About content is too large');
+
+const richTextValue = z.union([z.string().trim().max(5000), richTextDocument]);
+const richBilingualText = z.object({
+  en: richTextValue,
+  mr: richTextValue,
+}).strict();
+
 export const businessPayloadSchema = z.object({
   businessName: z.union([
     z.string().trim().min(1),
@@ -45,7 +76,7 @@ export const businessPayloadSchema = z.object({
   ownerName: z.union([z.string().trim().max(5000), bilingualText]).optional(),
   designation: z.union([z.string().trim().max(5000), bilingualText]).optional(),
   tagline: z.union([z.string().trim().max(5000), bilingualText]).optional(),
-  about: z.union([z.string().trim().max(5000), bilingualText]).optional(),
+  about: z.union([z.string().trim().max(5000), bilingualText, richBilingualText]).optional(),
   socialLinks: socialLinksSchema.optional(),
   businessNameMr: optionalMarathiText,
   categoryMr: optionalMarathiText,

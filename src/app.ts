@@ -9,6 +9,8 @@ import routes from './routes';
 const app = express();
 const defaultCorsOrigins = [
   'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:3002',
   'https://www.1identity.in',
 ];
 
