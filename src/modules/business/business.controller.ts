@@ -150,13 +150,18 @@ export const updateBusiness = asyncHandler(async (req, res) => {
   const { data: current, error: findError } = await supabaseAdmin.from('businesses').select('*').eq('id', req.params.id).single();
   if (findError || !current) throw new ApiError('Business not found', 404);
   if (current.owner_id !== user.id && !(req as any).isAdmin) throw new ApiError('You do not own this business', 403);
-  const merged = { ...toCard(current), ...req.body, id: current.id, slug: current.slug };
+  const merged = { ...toCard(current), ...req.body, id: current.id, slug: req.body.slug ?? current.slug };
   const nextLogoPublicId = toBusinessWrite(merged).logo_public_id;
   if (current.logo_public_id && current.logo_public_id !== nextLogoPublicId) {
     await deleteCloudinaryImage(current.logo_public_id, current.id);
   }
   const { data, error } = await saveBusiness(current.id, merged);
-  if (error) throw new ApiError(error.message, 400);
+  if (error) {
+    if (error.code === '23505' && /slug/i.test(error.message || '')) {
+      throw new ApiError('This slug is already in use. Please choose another slug.', 409);
+    }
+    throw new ApiError('Unable to update business information', 400);
+  }
   res.json(apiSuccess(toCard(data)));
 });
 

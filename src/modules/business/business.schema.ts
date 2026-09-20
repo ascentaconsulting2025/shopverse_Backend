@@ -67,7 +67,14 @@ const richBilingualText = z.object({
   mr: richTextValue,
 }).strict();
 
+const slugSchema = z.string()
+  .trim()
+  .min(1, 'Slug is required.')
+  .max(48, 'Slug must be 48 characters or fewer.')
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Use only lowercase letters, numbers, and hyphens.');
+
 export const businessPayloadSchema = z.object({
+  slug: slugSchema.optional(),
   businessName: z.union([
     z.string().trim().min(1),
     bilingualText,

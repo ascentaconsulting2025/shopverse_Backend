@@ -144,14 +144,18 @@ exports.updateBusiness = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         throw new apiError_1.ApiError('Business not found', 404);
     if (current.owner_id !== user.id && !req.isAdmin)
         throw new apiError_1.ApiError('You do not own this business', 403);
-    const merged = { ...(0, business_mapper_1.toCard)(current), ...req.body, id: current.id, slug: current.slug };
+    const merged = { ...(0, business_mapper_1.toCard)(current), ...req.body, id: current.id, slug: req.body.slug ?? current.slug };
     const nextLogoPublicId = (0, business_mapper_1.toBusinessWrite)(merged).logo_public_id;
     if (current.logo_public_id && current.logo_public_id !== nextLogoPublicId) {
         await (0, cloudinaryAsset_1.deleteCloudinaryImage)(current.logo_public_id, current.id);
     }
     const { data, error } = await saveBusiness(current.id, merged);
-    if (error)
-        throw new apiError_1.ApiError(error.message, 400);
+    if (error) {
+        if (error.code === '23505' && /slug/i.test(error.message || '')) {
+            throw new apiError_1.ApiError('This slug is already in use. Please choose another slug.', 409);
+        }
+        throw new apiError_1.ApiError('Unable to update business information', 400);
+    }
     res.json((0, apiResponse_1.apiSuccess)((0, business_mapper_1.toCard)(data)));
 });
 exports.deleteBusiness = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
