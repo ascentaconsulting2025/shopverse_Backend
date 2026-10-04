@@ -28,6 +28,8 @@ create table if not exists public.businesses (
   tagline_mr text,
   logo_url text,
   logo_public_id text,
+  profile_image_url text,
+  profile_image_public_id text,
   phone text,
   whatsapp_number text,
   address text,
@@ -44,6 +46,10 @@ create table if not exists public.businesses (
 
 -- Existing installations: add the field used to preserve the complete card model.
 alter table public.businesses add column if not exists details jsonb not null default '{}'::jsonb;
+alter table public.businesses add column if not exists logo_url text;
+alter table public.businesses add column if not exists logo_public_id text;
+alter table public.businesses add column if not exists profile_image_url text;
+alter table public.businesses add column if not exists profile_image_public_id text;
 alter table public.businesses add column if not exists phone text;
 alter table public.businesses add column if not exists business_name_mr text;
 alter table public.businesses add column if not exists category_mr text;
