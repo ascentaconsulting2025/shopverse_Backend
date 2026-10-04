@@ -20,14 +20,25 @@ export const makeContentController = (kind: Kind) => ({
     const current = await requireContent(kind, req.params.id);
     await requireOwner(current.business_id, req);
     const imageField = kind === 'events' ? req.body.photo ?? req.body.image : kind === 'gallery' ? req.body.url ?? req.body.imageUrl : undefined;
+    let replacedImagePublicId: string | null = null;
     if (imageField !== undefined) {
       const nextPublicId = req.body.imagePublicId || cloudinaryPublicIdFromUrl(imageField);
       const currentPublicId = kind === 'events' ? current.poster_public_id : current.image_public_id;
       if (currentPublicId && currentPublicId !== nextPublicId) {
-        await deleteCloudinaryImage(currentPublicId, current.id);
+        replacedImagePublicId = currentPublicId;
       }
     }
-    res.json(apiSuccess(mapRow(kind, await contentService.update(kind, req.params.id, req.body))));
+    const updated = await contentService.update(kind, req.params.id, req.body);
+    if (replacedImagePublicId) {
+      deleteCloudinaryImage(replacedImagePublicId, current.id).catch((error) =>
+        console.error('Cloudinary cleanup failed after content image update', {
+          contentId: current.id,
+          publicId: replacedImagePublicId,
+          error: error instanceof Error ? error.message : error,
+        }),
+      );
+    }
+    res.json(apiSuccess(mapRow(kind, updated)));
   }),
   remove: asyncHandler(async (req, res) => {
     const current = await requireContent(kind, req.params.id);
