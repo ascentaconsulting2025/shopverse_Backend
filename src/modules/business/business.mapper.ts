@@ -61,6 +61,7 @@ export function toCard(row: any): any {
     logoPublicId: details.logoPublicId || row.logo_public_id || '',
     profileImage: details.profileImage || row.profile_image_url || '',
     profileImagePublicId: details.profileImagePublicId || row.profile_image_public_id || '',
+    people: Array.isArray(row.people) ? row.people : (Array.isArray(details.people) ? details.people : []),
     address: details.address || row.address || {},
     socialLinks,
     status: row.status || (row.is_published ? 'active' : (details.status || 'draft')),
@@ -70,6 +71,20 @@ export function toCard(row: any): any {
     products: details.products || [], services: details.services || [], gallery: details.gallery || [],
     offers: details.offers || [], events: details.events || [], reviews: details.reviews || [],
     stats: { ...baseStats, ...(details.stats || {}) },
+  };
+}
+
+export function toBusinessPerson(row: any) {
+  return {
+    id: row.id,
+    fullName: { en: row.full_name_en || '', mr: row.full_name_mr || '' },
+    designation: { en: row.designation_en || '', mr: row.designation_mr || '' },
+    description: { en: row.description_en || '', mr: row.description_mr || '' },
+    profileImage: row.profile_image_url || '',
+    profileImagePublicId: row.profile_image_public_id || '',
+    displayOrder: row.display_order ?? 0,
+    isPrimary: row.is_primary === true,
+    isActive: row.is_active !== false,
   };
 }
 

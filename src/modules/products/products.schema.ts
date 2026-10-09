@@ -5,7 +5,7 @@ const bilingualField = z.object({ en: z.string(), mr: z.string() });
 export const createProductSchema = z.object({
   name: bilingualField,
   description: bilingualField,
-  price: z.coerce.number().finite().min(0),
+  price: z.union([z.coerce.number().finite().positive(), z.null()]).optional(),
   originalPrice: z.coerce.number().finite().min(0).optional(),
   image: z.string().trim().optional().default(''),
   imagePublicId: z.string().trim().optional(),
@@ -15,5 +15,6 @@ export const createProductSchema = z.object({
 });
 
 export const updateProductSchema = createProductSchema.extend({
+  price: z.union([z.coerce.number().finite().positive(), z.null()]).optional(),
   originalPrice: z.union([z.coerce.number().finite().min(0), z.null()]).optional(),
 }).partial();

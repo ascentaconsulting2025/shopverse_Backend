@@ -2,7 +2,7 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import { ApiError } from '../../utils/apiError';
 import { apiSuccess } from '../../utils/apiResponse';
 import { supabaseAdmin } from '../../config/supabaseClient';
-import { toBusinessWrite, toCard } from './business.mapper';
+import { toBusinessWrite, toBusinessPerson, toCard } from './business.mapper';
 import { slugify, uniqueSuffix } from '../../utils/generateSlug';
 import { sectionVisibilitySchema } from './business.schema';
 import { deleteCloudinaryImage } from '../../utils/cloudinaryAsset';
@@ -38,7 +38,7 @@ const toService = (row: any) => ({
   id: row.id,
   name: { en: row.name_en ?? row.name ?? '', mr: row.name_mr ?? row.name ?? '' },
   description: { en: row.details_en ?? row.details ?? '', mr: row.details_mr ?? row.details ?? '' },
-  startingPrice: Number(row.starting_price || 0),
+  startingPrice: row.starting_price == null || Number(row.starting_price) <= 0 ? undefined : Number(row.starting_price),
   duration: { en: row.duration_en ?? '', mr: row.duration_mr ?? '' },
   category: { en: row.category_en ?? '', mr: row.category_mr ?? '' },
   image: row.cover_image || '', imagePublicId: row.cover_image_public_id || '',
@@ -50,8 +50,8 @@ const toProduct = (row: any) => ({
   id: row.id,
   name: { en: row.name_en ?? row.name ?? '', mr: row.name_mr ?? row.name ?? '' },
   description: { en: row.description_en ?? row.description ?? '', mr: row.description_mr ?? row.description ?? '' },
-  price: Number(row.price || 0),
-  originalPrice: row.original_price == null ? undefined : Number(row.original_price),
+  price: row.price == null || Number(row.price) <= 0 ? undefined : Number(row.price),
+  originalPrice: row.original_price == null || Number(row.original_price) <= 0 ? undefined : Number(row.original_price),
   image: row.image_url || '', imagePublicId: row.image_public_id || '',
   category: { en: row.category_en ?? row.category ?? '', mr: row.category_mr ?? row.category ?? '' },
   isAvailable: row.is_available ?? true,
@@ -60,7 +60,7 @@ const toProduct = (row: any) => ({
 });
 
 const toEvent = (row: any) => ({ id: row.id, title: { en: row.event_name_en, mr: row.event_name_mr }, eventName: { en: row.event_name_en, mr: row.event_name_mr }, description: { en: row.description_en, mr: row.description_mr }, date: row.event_date, time: row.start_time, venue: { en: row.venue_en, mr: row.venue_mr }, enquiryNo: row.enquiry_number, eventLink: row.website_url || '', photo: row.poster_url || '', image: row.poster_url || '', imagePublicId: row.poster_public_id || '', isActive: row.is_active });
-const toOffer = (row: any) => ({ id: row.id, title: { en: row.offer_title_en, mr: row.offer_title_mr }, description: { en: row.terms_en, mr: row.terms_mr }, discountBadge: { en: row.discount_badge_en, mr: row.discount_badge_mr }, discountPercentage: row.discount_percentage == null ? undefined : Number(row.discount_percentage), couponCode: row.coupon_code, validUntil: { en: row.validity_en, mr: row.validity_mr }, isActive: row.is_active });
+const toOffer = (row: any) => ({ id: row.id, title: { en: row.offer_title_en, mr: row.offer_title_mr }, description: { en: row.terms_en, mr: row.terms_mr }, discountBadge: { en: row.discount_badge_en, mr: row.discount_badge_mr }, discountPercentage: row.discount_percentage == null ? undefined : Number(row.discount_percentage), couponCode: row.coupon_code, validUntil: { en: row.validity_en, mr: row.validity_mr }, imageUrl: row.image_url || '', imagePublicId: row.image_public_id || '', isActive: row.is_active });
 const toGallery = (row: any) => ({ id: row.id, url: row.image_url, imageUrl: row.image_url, imagePublicId: row.image_public_id || '', caption: row.caption, category: row.category, sortOrder: row.sort_order, isActive: row.is_active });
 
 async function loadProducts(businessId: string) {
@@ -82,6 +82,59 @@ async function loadContent(businessId: string) {
     supabaseAdmin.from('gallery_photos').select('*').eq('business_id', businessId).eq('is_active', true).is('deleted_at', null).order('sort_order').order('created_at', { ascending: false }),
   ]);
   return { events: events.data || [], offers: offers.data || [], gallery: gallery.data || [] };
+}
+
+async function loadPeople(businessId: string, includeInactive = false) {
+  let query = supabaseAdmin.from('business_people').select('*').eq('business_id', businessId).order('display_order').order('created_at');
+  if (!includeInactive) query = query.eq('is_active', true);
+  const { data, error } = await query;
+  if (error) throw new ApiError(error.message, 400);
+  return (data || []).map(toBusinessPerson);
+}
+
+/** Replaces the visible leadership set without deleting history/assets. */
+async function savePeople(businessId: string, people: any[] | undefined) {
+  if (people === undefined) return;
+  const activePrimary = people.filter((person) => person.isActive !== false && person.isPrimary);
+  if (activePrimary.length > 1) throw new ApiError('Only one active primary person is allowed', 400);
+  if (people.some((person) => person.isActive !== false) && activePrimary.length !== 1) throw new ApiError('Exactly one active primary person is required', 400);
+
+  const incomingIds = people.map((person) => person.id).filter(Boolean);
+  const existing = await supabaseAdmin.from('business_people').select('id').eq('business_id', businessId);
+  if (existing.error) throw new ApiError(existing.error.message, 400);
+  const existingIds = new Set((existing.data || []).map((person: any) => person.id));
+  if (incomingIds.some((id) => !existingIds.has(id))) throw new ApiError('A leadership record does not belong to this business', 400);
+
+  // Deactivate omitted records; this is recoverable and prevents stale people from rendering.
+  const omittedIds = [...existingIds].filter((id) => !incomingIds.includes(id));
+  if (omittedIds.length) {
+    const { error } = await supabaseAdmin.from('business_people').update({ is_active: false, is_primary: false, updated_at: new Date().toISOString() }).in('id', omittedIds);
+    if (error) throw new ApiError(error.message, 400);
+  }
+  // Clear an existing primary first so the partial unique index is never violated.
+  const clearPrimary = await supabaseAdmin.from('business_people').update({ is_primary: false }).eq('business_id', businessId).eq('is_primary', true);
+  if (clearPrimary.error) throw new ApiError(clearPrimary.error.message, 400);
+  for (const person of people) {
+    const payload = {
+      business_id: businessId,
+      full_name_en: person.fullName.en || person.fullName.mr,
+      full_name_mr: person.fullName.mr || null,
+      designation_en: person.designation?.en || null,
+      designation_mr: person.designation?.mr || null,
+      description_en: person.description?.en || null,
+      description_mr: person.description?.mr || null,
+      profile_image_url: person.profileImage || null,
+      profile_image_public_id: person.profileImagePublicId || null,
+      display_order: person.displayOrder ?? 0,
+      is_primary: person.isPrimary === true,
+      is_active: person.isActive !== false,
+      updated_at: new Date().toISOString(),
+    };
+    const result = person.id
+      ? await supabaseAdmin.from('business_people').update(payload).eq('id', person.id).eq('business_id', businessId)
+      : await supabaseAdmin.from('business_people').insert(payload);
+    if (result.error) throw new ApiError(result.error.message, 400);
+  }
 }
 
 async function insertBusiness(card: Record<string, any>, ownerId: string) {
@@ -112,7 +165,8 @@ export const createBusiness = asyncHandler(async (req, res) => {
     const slug = attempt === 0 ? baseSlug : `${baseSlug}-${uniqueSuffix()}`;
     const result = await insertBusiness({ ...req.body, slug }, user.id);
     if (!result.error) {
-      res.status(201).json(apiSuccess(toCard(result.data)));
+      await savePeople(result.data.id, req.body.people);
+      res.status(201).json(apiSuccess({ ...toCard(result.data), people: await loadPeople(result.data.id, true) }));
       return;
     }
     lastError = result.error;
@@ -125,7 +179,7 @@ export const createBusiness = asyncHandler(async (req, res) => {
 export const getBusinessBySlug = asyncHandler(async (req, res) => {
   const { data, error } = await supabaseAdmin.from('businesses').select('*').eq('slug', req.params.slug).eq('is_published', true).single();
   if (error || !data) throw new ApiError('Business not found', 404);
-  const [products, services, content, visibility] = await Promise.all([loadProducts(data.id), loadServices(data.id), loadContent(data.id), loadVisibility(data.id)]);
+  const [products, services, content, visibility, people] = await Promise.all([loadProducts(data.id), loadServices(data.id), loadContent(data.id), loadVisibility(data.id), loadPeople(data.id)]);
   const card = toCard(data);
   res.json(apiSuccess({
     ...card,
@@ -133,6 +187,7 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
     products: products.map(toProduct),
     ...(services ? { services: services.map(toService) } : {}),
     events: content.events.map(toEvent), offers: content.offers.map(toOffer), gallery: content.gallery.map(toGallery),
+    people,
   }));
 });
 
@@ -162,7 +217,8 @@ export const updateBusiness = asyncHandler(async (req, res) => {
     }
     throw new ApiError('Unable to update business information', 400);
   }
-  res.json(apiSuccess(toCard(data)));
+  await savePeople(current.id, req.body.people);
+  res.json(apiSuccess({ ...toCard(data), people: await loadPeople(current.id, true) }));
 });
 
 export const deleteBusiness = asyncHandler(async (req, res) => {
@@ -202,13 +258,14 @@ export const listMyBusinesses = asyncHandler(async (req, res) => {
   const { data, error } = await query;
   if (error) throw new ApiError(error.message, 400);
   const cards = await Promise.all(data.map(async (row) => {
-    const [products, services, visibility] = await Promise.all([loadProducts(row.id), loadServices(row.id), loadVisibility(row.id)]);
+    const [products, services, visibility, people] = await Promise.all([loadProducts(row.id), loadServices(row.id), loadVisibility(row.id), loadPeople(row.id, true)]);
     const card = toCard(row);
     return {
       ...card,
       sectionVisibility: { products: visibility.products, services: visibility.services, offers: visibility.special_offers, gallery: visibility.photo_gallery, events: visibility.upcoming_events },
       products: products.map(toProduct),
       ...(services ? { services: services.map(toService) } : {}),
+      people,
     };
   }));
   res.json(apiSuccess(cards));

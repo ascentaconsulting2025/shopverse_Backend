@@ -15,7 +15,7 @@ const toService = (row: any) => ({
   id: row.id,
   name: { en: row.name_en ?? row.name ?? '', mr: row.name_mr ?? row.name ?? '' },
   description: { en: row.details_en ?? row.details ?? '', mr: row.details_mr ?? row.details ?? '' },
-  startingPrice: Number(row.starting_price || 0),
+  startingPrice: row.starting_price == null || Number(row.starting_price) <= 0 ? undefined : Number(row.starting_price),
   duration: { en: row.duration_en ?? '', mr: row.duration_mr ?? '' },
   category: { en: row.category_en ?? '', mr: row.category_mr ?? '' },
   image: row.cover_image || '', imagePublicId: row.cover_image_public_id || '',

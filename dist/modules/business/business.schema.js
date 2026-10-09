@@ -31,6 +31,17 @@ const bilingualText = zod_1.z.object({
     en: zod_1.z.string().trim().max(5000).optional(),
     mr: zod_1.z.string().trim().max(5000).optional(),
 });
+const businessPersonSchema = zod_1.z.object({
+    id: zod_1.z.string().uuid().optional(),
+    fullName: bilingualText.refine((value) => Boolean(value.en?.trim() || value.mr?.trim()), 'A person name is required'),
+    designation: bilingualText.optional(),
+    description: bilingualText.optional(),
+    profileImage: zod_1.z.string().trim().max(2000).nullable().optional(),
+    profileImagePublicId: zod_1.z.string().trim().max(500).nullable().optional(),
+    displayOrder: zod_1.z.coerce.number().int().min(0).default(0),
+    isPrimary: zod_1.z.boolean().default(false),
+    isActive: zod_1.z.boolean().default(true),
+}).strict();
 const richTextMark = zod_1.z.object({
     text: zod_1.z.string().max(5000),
     bold: zod_1.z.boolean().optional(),
@@ -81,4 +92,16 @@ exports.businessPayloadSchema = zod_1.z.object({
     designationMr: optionalMarathiText,
     taglineMr: optionalMarathiText,
     aboutMr: optionalMarathiText,
+    people: zod_1.z.array(businessPersonSchema).max(50).optional().superRefine((people, context) => {
+        if (!people)
+            return;
+        const activePrimary = people.filter((person) => person.isActive && person.isPrimary);
+        if (activePrimary.length > 1)
+            context.addIssue({ code: zod_1.z.ZodIssueCode.custom, message: 'Only one active primary person is allowed' });
+        if (people.some((person) => person.isActive) && activePrimary.length !== 1)
+            context.addIssue({ code: zod_1.z.ZodIssueCode.custom, message: 'Exactly one active primary person is required' });
+        const ids = people.map((person) => person.id).filter(Boolean);
+        if (new Set(ids).size !== ids.length)
+            context.addIssue({ code: zod_1.z.ZodIssueCode.custom, message: 'People must not contain duplicate IDs' });
+    }),
 }).passthrough();
