@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.businessPayloadSchema = exports.createBusinessSchema = exports.sectionVisibilitySchema = void 0;
 const zod_1 = require("zod");
+const theme_schema_1 = require("./theme.schema");
 exports.sectionVisibilitySchema = zod_1.z.object({
     products: zod_1.z.boolean(),
     services: zod_1.z.boolean(),
@@ -75,6 +76,8 @@ const slugSchema = zod_1.z.string()
     .max(48, 'Slug must be 48 characters or fewer.')
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Use only lowercase letters, numbers, and hyphens.');
 exports.businessPayloadSchema = zod_1.z.object({
+    themeConfig: theme_schema_1.themeConfigSchema.nullable().optional(),
+    themeDraft: theme_schema_1.themeConfigSchema.nullable().optional(),
     slug: slugSchema.optional(),
     businessName: zod_1.z.union([
         zod_1.z.string().trim().min(1),

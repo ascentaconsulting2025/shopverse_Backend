@@ -180,6 +180,7 @@ exports.getBusinessBySlug = (0, asyncHandler_1.asyncHandler)(async (req, res) =>
         throw new apiError_1.ApiError('Business not found', 404);
     const [products, services, content, visibility, people] = await Promise.all([loadProducts(data.id), loadServices(data.id), loadContent(data.id), loadVisibility(data.id), loadPeople(data.id)]);
     const card = (0, business_mapper_1.toCard)(data);
+    delete card.themeDraft;
     res.json((0, apiResponse_1.apiSuccess)({
         ...card,
         sectionVisibility: { products: visibility.products, services: visibility.services, offers: visibility.special_offers, gallery: visibility.photo_gallery, events: visibility.upcoming_events },
@@ -205,6 +206,10 @@ exports.updateBusiness = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         throw new apiError_1.ApiError('Business not found', 404);
     if (current.owner_id !== user.id && !req.isAdmin)
         throw new apiError_1.ApiError('You do not own this business', 403);
+    const themeChanged = ['themeConfig', 'themeDraft'].some(key => req.body[key] != null && JSON.stringify(req.body[key]) !== JSON.stringify(current.details?.[key]));
+    if (themeChanged && current.plan_id !== 'premium') {
+        throw new apiError_1.ApiError('Premium plan is required to save or publish a custom theme', 403);
+    }
     const merged = { ...(0, business_mapper_1.toCard)(current), ...req.body, id: current.id, slug: req.body.slug ?? current.slug };
     const nextLogoPublicId = (0, business_mapper_1.toBusinessWrite)(merged).logo_public_id;
     if (current.logo_public_id && current.logo_public_id !== nextLogoPublicId) {
