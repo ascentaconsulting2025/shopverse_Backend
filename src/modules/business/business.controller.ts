@@ -201,6 +201,58 @@ export const getBusinessCount = asyncHandler(async (_req, res) => {
   res.json(apiSuccess({ count: count || 0 }));
 });
 
+/** Public marketplace feed. Only published businesses and active child records are exposed. */
+export const listMarketplace = asyncHandler(async (req, res) => {
+  const search = String(req.query.search || '').trim().toLowerCase();
+  const kind = String(req.query.kind || 'all');
+  const { data, error } = await supabaseAdmin
+    .from('businesses')
+    .select('*')
+    .eq('is_published', true)
+    .order('updated_at', { ascending: false });
+  if (error) throw new ApiError(error.message, 400);
+
+  const businesses = await Promise.all((data || []).map(async (row) => {
+    const [products, services, content, people] = await Promise.all([
+      loadProducts(row.id),
+      loadServices(row.id),
+      loadContent(row.id),
+      loadPeople(row.id),
+    ]);
+    const card = toCard(row);
+    return {
+      id: row.id,
+      slug: row.slug,
+      businessName: card.businessName,
+      ownerName: card.ownerName,
+      category: card.category,
+      logo: card.logo,
+      profileImage: card.profileImage,
+      address: card.address,
+      isVerified: card.isVerified,
+      people,
+      products: products.filter((item: any) => item.is_available !== false).map(toProduct),
+      services: (services || []).map(toService),
+      events: content.events.filter((item: any) => item.is_active !== false).map(toEvent),
+    };
+  }));
+
+  const result = businesses.flatMap((business: any) => {
+    const businessText = [business.businessName?.en, business.businessName?.mr, business.category?.en, business.category?.mr, business.ownerName?.en, business.ownerName?.mr].join(' ').toLowerCase();
+    const matches = (item: any) => !search || [item.title?.en, item.title?.mr, item.name?.en, item.name?.mr, item.fullName?.en, item.fullName?.mr, item.designation?.en, item.designation?.mr, item.description?.en, item.description?.mr, item.category?.en, item.category?.mr, item.venue?.en, item.venue?.mr, businessText].join(' ').toLowerCase().includes(search);
+    const records: any[] = [];
+    if (kind === 'all' || kind === 'product') business.products.filter(matches).forEach((item: any) => records.push({ type: 'product', item, business }));
+    if (kind === 'all' || kind === 'service') business.services.filter(matches).forEach((item: any) => records.push({ type: 'service', item, business }));
+    if (kind === 'all' || kind === 'event') business.events.filter(matches).forEach((item: any) => records.push({ type: 'event', item, business }));
+    if (kind === 'all' || kind === 'owner') {
+      business.people.filter(matches).forEach((person: any) => records.push({ type: 'owner', item: person, business }));
+    }
+    return records;
+  });
+
+  res.json(apiSuccess(result));
+});
+
 export const updateBusiness = asyncHandler(async (req, res) => {
   const user = (req as any).user;
   const { data: current, error: findError } = await supabaseAdmin.from('businesses').select('*').eq('id', req.params.id).single();

@@ -8,6 +8,7 @@ const router = Router();
 
 router.get('/mine', authGuard, controller.listMyBusinesses);
 router.get('/count', controller.getBusinessCount);
+router.get('/marketplace', controller.listMarketplace);
 router.post('/', authGuard, validateRequest(businessPayloadSchema), controller.createBusiness);
 router.get('/:id/section-visibility', authGuard, controller.getSectionVisibility);
 router.patch('/:id/section-visibility', authGuard, controller.updateSectionVisibility);
