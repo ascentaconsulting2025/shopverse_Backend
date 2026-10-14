@@ -241,6 +241,20 @@ export const listMarketplace = asyncHandler(async (req, res) => {
     const businessText = [business.businessName?.en, business.businessName?.mr, business.category?.en, business.category?.mr, business.ownerName?.en, business.ownerName?.mr].join(' ').toLowerCase();
     const matches = (item: any) => !search || [item.title?.en, item.title?.mr, item.name?.en, item.name?.mr, item.fullName?.en, item.fullName?.mr, item.designation?.en, item.designation?.mr, item.description?.en, item.description?.mr, item.category?.en, item.category?.mr, item.venue?.en, item.venue?.mr, businessText].join(' ').toLowerCase().includes(search);
     const records: any[] = [];
+    if (kind === 'all' || kind === 'business') {
+      if (!search || businessText.includes(search)) {
+        records.push({
+          type: 'business',
+          item: {
+            id: business.id,
+            name: business.businessName,
+            category: business.category,
+            description: business.category,
+          },
+          business,
+        });
+      }
+    }
     if (kind === 'all' || kind === 'product') business.products.filter(matches).forEach((item: any) => records.push({ type: 'product', item, business }));
     if (kind === 'all' || kind === 'service') business.services.filter(matches).forEach((item: any) => records.push({ type: 'service', item, business }));
     if (kind === 'all' || kind === 'event') business.events.filter(matches).forEach((item: any) => records.push({ type: 'event', item, business }));
