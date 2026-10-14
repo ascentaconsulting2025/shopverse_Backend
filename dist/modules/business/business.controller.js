@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getBusinessUsage = exports.updateSectionVisibility = exports.getSectionVisibility = exports.listMyBusinesses = exports.deleteBusiness = exports.updateBusiness = exports.getBusinessCount = exports.getBusinessBySlug = exports.createBusiness = void 0;
+exports.getBusinessUsage = exports.updateSectionVisibility = exports.getSectionVisibility = exports.listMyBusinesses = exports.deleteBusiness = exports.updateBusiness = exports.listMarketplace = exports.getBusinessCount = exports.getBusinessBySlug = exports.createBusiness = void 0;
 const asyncHandler_1 = require("../../utils/asyncHandler");
 const apiError_1 = require("../../utils/apiError");
 const apiResponse_1 = require("../../utils/apiResponse");
@@ -198,6 +198,72 @@ exports.getBusinessCount = (0, asyncHandler_1.asyncHandler)(async (_req, res) =>
     if (error)
         throw new apiError_1.ApiError(error.message, 400);
     res.json((0, apiResponse_1.apiSuccess)({ count: count || 0 }));
+});
+/** Public marketplace feed. Only published businesses and active child records are exposed. */
+exports.listMarketplace = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    const search = String(req.query.search || '').trim().toLowerCase();
+    const kind = String(req.query.kind || 'all');
+    const { data, error } = await supabaseClient_1.supabaseAdmin
+        .from('businesses')
+        .select('*')
+        .eq('is_published', true)
+        .order('updated_at', { ascending: false });
+    if (error)
+        throw new apiError_1.ApiError(error.message, 400);
+    const businesses = await Promise.all((data || []).map(async (row) => {
+        const [products, services, content, people] = await Promise.all([
+            loadProducts(row.id),
+            loadServices(row.id),
+            loadContent(row.id),
+            loadPeople(row.id),
+        ]);
+        const card = (0, business_mapper_1.toCard)(row);
+        return {
+            id: row.id,
+            slug: row.slug,
+            businessName: card.businessName,
+            ownerName: card.ownerName,
+            category: card.category,
+            logo: card.logo,
+            profileImage: card.profileImage,
+            address: card.address,
+            isVerified: card.isVerified,
+            people,
+            products: products.filter((item) => item.is_available !== false).map(toProduct),
+            services: (services || []).map(toService),
+            events: content.events.filter((item) => item.is_active !== false).map(toEvent),
+        };
+    }));
+    const result = businesses.flatMap((business) => {
+        const businessText = [business.businessName?.en, business.businessName?.mr, business.category?.en, business.category?.mr, business.ownerName?.en, business.ownerName?.mr].join(' ').toLowerCase();
+        const matches = (item) => !search || [item.title?.en, item.title?.mr, item.name?.en, item.name?.mr, item.fullName?.en, item.fullName?.mr, item.designation?.en, item.designation?.mr, item.description?.en, item.description?.mr, item.category?.en, item.category?.mr, item.venue?.en, item.venue?.mr, businessText].join(' ').toLowerCase().includes(search);
+        const records = [];
+        if (kind === 'all' || kind === 'business') {
+            if (!search || businessText.includes(search)) {
+                records.push({
+                    type: 'business',
+                    item: {
+                        id: business.id,
+                        name: business.businessName,
+                        category: business.category,
+                        description: business.category,
+                    },
+                    business,
+                });
+            }
+        }
+        if (kind === 'all' || kind === 'product')
+            business.products.filter(matches).forEach((item) => records.push({ type: 'product', item, business }));
+        if (kind === 'all' || kind === 'service')
+            business.services.filter(matches).forEach((item) => records.push({ type: 'service', item, business }));
+        if (kind === 'all' || kind === 'event')
+            business.events.filter(matches).forEach((item) => records.push({ type: 'event', item, business }));
+        if (kind === 'all' || kind === 'owner') {
+            business.people.filter(matches).forEach((person) => records.push({ type: 'owner', item: person, business }));
+        }
+        return records;
+    });
+    res.json((0, apiResponse_1.apiSuccess)(result));
 });
 exports.updateBusiness = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const user = req.user;
