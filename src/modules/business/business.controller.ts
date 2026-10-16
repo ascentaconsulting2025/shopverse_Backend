@@ -1,3 +1,4 @@
+import { loadCategories, publicItems } from '../categories/categories.service';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { ApiError } from '../../utils/apiError';
 import { apiSuccess } from '../../utils/apiResponse';
@@ -35,7 +36,7 @@ const missingPhoneColumn = (error: any) =>
   (error?.code === 'PGRST204' || error?.code === '42703') && /phone/i.test(error.message || '');
 
 const toService = (row: any) => ({
-  id: row.id,
+  id: row.id, categoryId: row.folder_category_id ?? null, isPublished: row.is_published !== false,
   name: { en: row.name_en ?? row.name ?? '', mr: row.name_mr ?? row.name ?? '' },
   description: { en: row.details_en ?? row.details ?? '', mr: row.details_mr ?? row.details ?? '' },
   startingPrice: row.starting_price == null || Number(row.starting_price) <= 0 ? undefined : Number(row.starting_price),
@@ -47,7 +48,7 @@ const toService = (row: any) => ({
 });
 
 const toProduct = (row: any) => ({
-  id: row.id,
+  id: row.id, categoryId: row.folder_category_id ?? null, isPublished: row.is_published !== false,
   name: { en: row.name_en ?? row.name ?? '', mr: row.name_mr ?? row.name ?? '' },
   description: { en: row.description_en ?? row.description ?? '', mr: row.description_mr ?? row.description ?? '' },
   price: row.price == null || Number(row.price) <= 0 ? undefined : Number(row.price),
@@ -185,8 +186,9 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
   res.json(apiSuccess({
     ...card,
     sectionVisibility: { products: visibility.products, services: visibility.services, offers: visibility.special_offers, gallery: visibility.photo_gallery, events: visibility.upcoming_events },
-    products: products.map(toProduct),
-    ...(services ? { services: services.map(toService) } : {}),
+    categories: (await loadCategories(data.id)).filter(c => c.is_published),
+    products: (await publicItems(data.id, 'product', products)).map(toProduct),
+    services: (await publicItems(data.id, 'service', services || [])).map(toService),
     events: content.events.map(toEvent), offers: content.offers.map(toOffer), gallery: content.gallery.map(toGallery),
     people,
   }));
@@ -231,8 +233,8 @@ export const listMarketplace = asyncHandler(async (req, res) => {
       address: card.address,
       isVerified: card.isVerified,
       people,
-      products: products.filter((item: any) => item.is_available !== false).map(toProduct),
-      services: (services || []).map(toService),
+      products: (await publicItems(row.id, 'product', products.filter(item => item.is_available !== false))).map(toProduct),
+      services: (await publicItems(row.id, 'service', services || [])).map(toService),
       events: content.events.filter((item: any) => item.is_active !== false).map(toEvent),
     };
   }));
@@ -291,7 +293,7 @@ export const updateBusiness = asyncHandler(async (req, res) => {
     throw new ApiError('Unable to update business information', 400);
   }
   await savePeople(current.id, req.body.people);
-  res.json(apiSuccess({ ...toCard(data), people: await loadPeople(current.id, true) }));
+  res.json(apiSuccess({ ...toCard(data), categories: await loadCategories(current.id), products: (await loadProducts(current.id)).map(toProduct), services: (await loadServices(current.id) || []).map(toService), people: await loadPeople(current.id, true) }));
 });
 
 export const deleteBusiness = asyncHandler(async (req, res) => {
@@ -336,6 +338,7 @@ export const listMyBusinesses = asyncHandler(async (req, res) => {
     return {
       ...card,
       sectionVisibility: { products: visibility.products, services: visibility.services, offers: visibility.special_offers, gallery: visibility.photo_gallery, events: visibility.upcoming_events },
+      categories: await loadCategories(row.id),
       products: products.map(toProduct),
       ...(services ? { services: services.map(toService) } : {}),
       people,

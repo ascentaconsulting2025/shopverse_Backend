@@ -5,6 +5,7 @@ import { validateRequest } from '../../middlewares/validateRequest';
 import { createProductSchema, updateProductSchema } from './products.schema';
 
 const router = Router();
+router.get('/:businessId/products/manage', authGuard, controller.manageProducts);
 
 router.post('/:businessId/products', authGuard, validateRequest(createProductSchema), controller.createProduct);
 router.get('/:businessId/products', controller.listProducts);

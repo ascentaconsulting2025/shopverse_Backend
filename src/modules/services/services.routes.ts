@@ -5,6 +5,7 @@ import { validateRequest } from '../../middlewares/validateRequest';
 import { createServiceSchema, updateServiceSchema } from './services.schema';
 
 const router = Router();
+router.get('/:businessId/services/manage', authGuard, controller.manageServices);
 
 router.post('/:businessId/services', authGuard, validateRequest(createServiceSchema), controller.createService);
 router.get('/:businessId/services', controller.listServices);

@@ -3,6 +3,8 @@ import { z } from 'zod';
 const bilingualField = z.object({ en: z.string(), mr: z.string() });
 
 export const createProductSchema = z.object({
+  categoryId: z.string().uuid().nullable().optional(),
+  isPublished: z.boolean().optional(),
   name: bilingualField,
   description: bilingualField,
   price: z.union([z.coerce.number().finite().positive(), z.null()]).optional(),
