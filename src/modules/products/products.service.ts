@@ -1,3 +1,4 @@
+import { validateCategory } from '../categories/categories.service';
 import { supabaseAdmin } from '../../config/supabaseClient';
 import { ApiError } from '../../utils/apiError';
 import { cloudinaryPublicIdFromUrl } from '../../utils/cloudinaryAsset';
@@ -18,8 +19,11 @@ export const productsService = {
 		return data || [];
 	},
 	async create(businessId: string, input: any) {
+    await validateCategory(businessId, 'product', input.categoryId);
 		const { data, error } = await supabaseAdmin.from('products').insert({
 			business_id: businessId,
+      folder_category_id: input.categoryId ?? null,
+      is_published: input.isPublished ?? true,
 			name: input.name.en || input.name.mr,
 			name_en: input.name.en,
 			name_mr: input.name.mr,
@@ -40,8 +44,12 @@ export const productsService = {
 		return data;
 	},
 	async update(id: string, input: any) {
+    const current = await requireProduct(id);
+    await validateCategory(current.business_id, 'product', input.categoryId);
 		const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
-		if (input.name !== undefined) { update.name = input.name.en || input.name.mr; update.name_en = input.name.en; update.name_mr = input.name.mr; }
+		if (input.categoryId !== undefined) update.folder_category_id = input.categoryId;
+    if (input.isPublished !== undefined) update.is_published = input.isPublished;
+    if (input.name !== undefined) { update.name = input.name.en || input.name.mr; update.name_en = input.name.en; update.name_mr = input.name.mr; }
 		if (input.description !== undefined) { update.description = input.description.en || input.description.mr || null; update.description_en = input.description.en; update.description_mr = input.description.mr; }
 		if (input.price !== undefined) update.price = input.price;
 		if (input.originalPrice !== undefined) update.original_price = input.originalPrice;

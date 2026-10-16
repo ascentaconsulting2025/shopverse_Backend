@@ -1,3 +1,4 @@
+import { publicItems, requireCategoryOwner, validateCategory } from '../categories/categories.service';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { ApiError } from '../../utils/apiError';
 import { apiSuccess } from '../../utils/apiResponse';
@@ -12,7 +13,7 @@ const requireBusinessOwner = async (businessId: string, userId: string, isAdmin 
 };
 
 const toService = (row: any) => ({
-  id: row.id,
+  id: row.id, categoryId: row.folder_category_id ?? null, isPublished: row.is_published !== false,
   name: { en: row.name_en ?? row.name ?? '', mr: row.name_mr ?? row.name ?? '' },
   description: { en: row.details_en ?? row.details ?? '', mr: row.details_mr ?? row.details ?? '' },
   startingPrice: row.starting_price == null || Number(row.starting_price) <= 0 ? undefined : Number(row.starting_price),
@@ -29,16 +30,20 @@ export const createService = asyncHandler(async (req, res) => {
 });
 
 export const listServices = asyncHandler(async (req, res) => {
-  res.json(apiSuccess((await servicesService.list(req.params.businessId)).map(toService)));
+  const rows = await servicesService.list(req.params.businessId);
+  res.json(apiSuccess((await publicItems(req.params.businessId, 'service', rows)).map(toService)));
 });
 
 export const getService = asyncHandler(async (req, res) => {
-  res.json(apiSuccess(toService(await requireService(req.params.id))));
+  const item = await requireService(req.params.id);
+  if (!(await publicItems(item.business_id, 'service', [item])).length) throw new ApiError('Item not found',404);
+  res.json(apiSuccess(toService(item)));
 });
 
 export const updateService = asyncHandler(async (req, res) => {
   const existing = await requireService(req.params.id);
   await requireBusinessOwner(existing.business_id, (req as any).user.id, (req as any).isAdmin);
+  await validateCategory(existing.business_id, 'service', req.body.categoryId);
   if (req.body.image !== undefined) {
     const nextPublicId = req.body.imagePublicId || cloudinaryPublicIdFromUrl(req.body.image);
     if (existing.cover_image_public_id && existing.cover_image_public_id !== nextPublicId) {
@@ -54,4 +59,9 @@ export const deleteService = asyncHandler(async (req, res) => {
   await deleteCloudinaryImage(existing.cover_image_public_id, existing.id);
   await servicesService.remove(req.params.id);
   res.status(204).send();
+});
+
+export const manageServices = asyncHandler(async(req,res)=>{
+ await requireCategoryOwner(req.params.businessId,req);
+ res.json(apiSuccess((await servicesService.list(req.params.businessId)).map(toService)));
 });

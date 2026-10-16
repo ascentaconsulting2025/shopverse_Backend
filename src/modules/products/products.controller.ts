@@ -1,3 +1,4 @@
+import { publicItems, requireCategoryOwner, validateCategory } from '../categories/categories.service';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { ApiError } from '../../utils/apiError';
 import { apiSuccess } from '../../utils/apiResponse';
@@ -12,7 +13,7 @@ const requireBusinessOwner = async (businessId: string, userId: string, isAdmin 
 };
 
 const toProduct = (row: any) => ({
-  id: row.id,
+  id: row.id, categoryId: row.folder_category_id ?? null, isPublished: row.is_published !== false,
   name: { en: row.name_en ?? row.name ?? '', mr: row.name_mr ?? row.name ?? '' },
   description: { en: row.description_en ?? row.description ?? '', mr: row.description_mr ?? row.description ?? '' },
   price: row.price == null || Number(row.price) <= 0 ? undefined : Number(row.price), originalPrice: row.original_price == null || Number(row.original_price) <= 0 ? undefined : Number(row.original_price),
@@ -26,16 +27,20 @@ export const createProduct = asyncHandler(async (req, res) => {
 });
 
 export const listProducts = asyncHandler(async (req, res) => {
-  res.json(apiSuccess((await productsService.list(req.params.businessId)).map(toProduct)));
+  const rows = await productsService.list(req.params.businessId);
+  res.json(apiSuccess((await publicItems(req.params.businessId, 'product', rows)).map(toProduct)));
 });
 
 export const getProduct = asyncHandler(async (req, res) => {
-  res.json(apiSuccess(toProduct(await requireProduct(req.params.id))));
+  const item = await requireProduct(req.params.id);
+  if (!(await publicItems(item.business_id, 'product', [item])).length) throw new ApiError('Item not found',404);
+  res.json(apiSuccess(toProduct(item)));
 });
 
 export const updateProduct = asyncHandler(async (req, res) => {
   const existing = await requireProduct(req.params.id);
   await requireBusinessOwner(existing.business_id, (req as any).user.id, (req as any).isAdmin);
+  await validateCategory(existing.business_id, 'product', req.body.categoryId);
   if (req.body.image !== undefined) {
     const nextPublicId = req.body.imagePublicId || cloudinaryPublicIdFromUrl(req.body.image);
     if (existing.image_public_id && existing.image_public_id !== nextPublicId) {
@@ -51,4 +56,9 @@ export const deleteProduct = asyncHandler(async (req, res) => {
   await deleteCloudinaryImage(existing.image_public_id, existing.id);
   await productsService.remove(req.params.id);
   res.status(204).send();
+});
+
+export const manageProducts = asyncHandler(async(req,res)=>{
+ await requireCategoryOwner(req.params.businessId,req);
+ res.json(apiSuccess((await productsService.list(req.params.businessId)).map(toProduct)));
 });

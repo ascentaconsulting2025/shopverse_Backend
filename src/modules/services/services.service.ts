@@ -1,3 +1,4 @@
+import { validateCategory } from '../categories/categories.service';
 import { supabaseAdmin } from '../../config/supabaseClient';
 import { ApiError } from '../../utils/apiError';
 import { cloudinaryPublicIdFromUrl } from '../../utils/cloudinaryAsset';
@@ -22,8 +23,11 @@ export const servicesService = {
   },
 
   async create(businessId: string, input: any) {
+    await validateCategory(businessId, 'service', input.categoryId);
     const { data, error } = await supabaseAdmin.from('services').insert({
       business_id: businessId,
+      folder_category_id: input.categoryId ?? null,
+      is_published: input.isPublished ?? true,
       name: input.name.en || input.name.mr,
       name_en: input.name.en,
       name_mr: input.name.mr,
@@ -43,7 +47,11 @@ export const servicesService = {
   },
 
   async update(id: string, input: any) {
+    const current = await requireService(id);
+    await validateCategory(current.business_id, 'service', input.categoryId);
     const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (input.categoryId !== undefined) update.folder_category_id = input.categoryId;
+    if (input.isPublished !== undefined) update.is_published = input.isPublished;
     if (input.name !== undefined) {
       update.name = input.name.en || input.name.mr;
       update.name_en = input.name.en;
