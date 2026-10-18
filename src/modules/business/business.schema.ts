@@ -9,6 +9,10 @@ export const sectionVisibilitySchema = z.object({
   upcoming_events: z.boolean(),
 }).strict();
 
+export const deleteBusinessSchema = z.object({
+  password: z.string().min(1, 'Password is required'),
+}).strict();
+
 export const createBusinessSchema = z.object({
   business_name: z.string().min(1),
   category: z.string().optional(),

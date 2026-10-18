@@ -2,10 +2,10 @@ import { loadCategories, publicItems } from '../categories/categories.service';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { ApiError } from '../../utils/apiError';
 import { apiSuccess } from '../../utils/apiResponse';
-import { supabaseAdmin } from '../../config/supabaseClient';
+import { createAuthClient, supabaseAdmin } from '../../config/supabaseClient';
 import { toBusinessWrite, toBusinessPerson, toCard } from './business.mapper';
 import { slugify, uniqueSuffix } from '../../utils/generateSlug';
-import { sectionVisibilitySchema } from './business.schema';
+import { deleteBusinessSchema, sectionVisibilitySchema } from './business.schema';
 import { deleteCloudinaryImage } from '../../utils/cloudinaryAsset';
 
 const toVisibility = (row: any) => ({
@@ -298,6 +298,7 @@ export const updateBusiness = asyncHandler(async (req, res) => {
 
 export const deleteBusiness = asyncHandler(async (req, res) => {
   const user = (req as any).user;
+  const { password } = deleteBusinessSchema.parse(req.body);
   const { data: current, error: findError } = await supabaseAdmin
     .from('businesses')
     .select('id, owner_id, logo_public_id')
@@ -305,6 +306,15 @@ export const deleteBusiness = asyncHandler(async (req, res) => {
     .single();
   if (findError || !current) throw new ApiError('Business not found', 404);
   if (current.owner_id !== user.id && !(req as any).isAdmin) throw new ApiError('You do not own this business', 403);
+
+  if (!user.email) throw new ApiError('A password-based account is required to delete a business', 400);
+  const verification = await createAuthClient().auth.signInWithPassword({
+    email: user.email,
+    password,
+  });
+  if (verification.error || verification.data.user?.id !== user.id) {
+    throw new ApiError('Password is incorrect', 401);
+  }
 
   const [products, services, events, gallery] = await Promise.all([
     supabaseAdmin.from('products').select('id, image_public_id').eq('business_id', current.id),
