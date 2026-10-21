@@ -3,6 +3,8 @@ import { z } from 'zod';
 const bilingualField = z.object({ en: z.string(), mr: z.string() });
 
 export const createProductSchema = z.object({
+  images: z.array(z.string().url().regex(/^https?:\/\//)).max(12).optional(),
+  specifications: z.record(z.string().max(80), z.string().max(500)).refine(v => Object.keys(v).length <= 30).optional(),
   categoryId: z.string().uuid().nullable().optional(),
   isPublished: z.boolean().optional(),
   name: bilingualField,

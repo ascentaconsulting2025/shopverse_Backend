@@ -1,3 +1,4 @@
+import exploreRoutes from '../modules/explore/explore.routes';
 import categoryRoutes from '../modules/categories/categories.routes';
 import { Router } from 'express';
 import authRoutes from '../modules/auth/auth.routes';
@@ -11,6 +12,7 @@ import uploadRoutes from '../modules/uploads/uploads.routes';
 
 const router = Router();
 
+router.use('/explore', exploreRoutes);
 router.use('/auth', authRoutes);
 router.use('/businesses', categoryRoutes);
 router.use('/businesses', businessRoutes);
