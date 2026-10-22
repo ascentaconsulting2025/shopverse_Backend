@@ -93,3 +93,20 @@ test('package database errors retain clear HTTP permission/quota statuses',()=>{
   }
  } finally { console.error=original; }
 });
+
+test('management listing isolates owners while preserving administrator access',async()=>{
+ const own=await run(controller.listMyBusinesses);
+ assert.deepEqual(own.data.map(card=>card.id),['business']);
+ const other=await run(controller.listMyBusinesses,{}, {user:{id:'other',role:'admin'}});
+ assert.deepEqual(other.data,[]); // Client metadata is not the server isAdmin flag.
+ const admin=await run(controller.listMyBusinesses,{}, {user:{id:'other'},isAdmin:true});
+ assert.deepEqual(admin.data.map(card=>card.id),['business']);
+});
+test('owners may edit existing content at quota; foreign owners may not edit',async()=>{
+ plan='standard';used.products=20;
+ const own=await run(products.updateProduct,{name:{en:'Updated'}},{params:{id:'product'}});
+ assert.equal(own.success,true);
+ const before=mutations.length;
+ await assert.rejects(run(products.updateProduct,{name:{en:'Forbidden'}},{params:{id:'product'},user:{id:'other'}}),error=>error.status===403);
+ assert.equal(mutations.length,before);
+});
