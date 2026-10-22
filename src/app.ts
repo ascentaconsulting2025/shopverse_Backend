@@ -7,6 +7,9 @@ import { errorHandler } from './middlewares/errorHandler';
 import routes from './routes';
 
 const app = express();
+// Opt in only to deployment-owned proxy addresses, so forwarded client IPs are trusted narrowly.
+const trustedProxies = (process.env.TRUSTED_PROXY_CIDRS || '').split(',').map(value => value.trim()).filter(Boolean);
+if (trustedProxies.length) app.set('trust proxy', trustedProxies);
 const defaultCorsOrigins = [
   'http://localhost:3000',
   'http://localhost:3001',

@@ -1,3 +1,4 @@
+import { requirePackageFeature } from '../packages/packages.service';
 import { publicItems, requireCategoryOwner, validateCategory } from '../categories/categories.service';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { ApiError } from '../../utils/apiError';
@@ -24,6 +25,7 @@ const toProduct = (row: any) => ({
 
 export const createProduct = asyncHandler(async (req, res) => {
   await requireBusinessOwner(req.params.businessId, (req as any).user.id, (req as any).isAdmin);
+  await requirePackageFeature(req.params.businessId, 'products', true);
   res.status(201).json(apiSuccess(toProduct(await productsService.create(req.params.businessId, req.body))));
 });
 
@@ -41,6 +43,7 @@ export const getProduct = asyncHandler(async (req, res) => {
 export const updateProduct = asyncHandler(async (req, res) => {
   const existing = await requireProduct(req.params.id);
   await requireBusinessOwner(existing.business_id, (req as any).user.id, (req as any).isAdmin);
+  if (req.body.isPublished === true && existing.is_published === false) await requirePackageFeature(existing.business_id, 'products');
   await validateCategory(existing.business_id, 'product', req.body.categoryId);
   if (req.body.image !== undefined) {
     const nextPublicId = req.body.imagePublicId || cloudinaryPublicIdFromUrl(req.body.image);

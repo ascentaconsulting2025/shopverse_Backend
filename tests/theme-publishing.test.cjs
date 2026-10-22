@@ -30,6 +30,11 @@ const stub = (path, exports) => {
 // No credentials, network requests, or real business writes in this suite.
 stub('../dist/config/supabaseClient.js', { supabaseAdmin: { from: makeQuery } });
 stub('../dist/utils/cloudinaryAsset.js', { cloudinaryPublicIdFromUrl: () => null, deleteCloudinaryImage: async () => {} });
+stub('../dist/config/env.js', { env: { SUPABASE_SERVICE_ROLE_KEY: 'test-key' } });
+stub('../dist/modules/packages/packages.service.js', {
+  ...require('../dist/modules/packages/packages.service.js'),
+  requirePackageFeature: async (id, feature) => { if (feature === 'themes' && rows.find(row => row.id === id)?.plan_id !== 'premium') throw Object.assign(new Error('Premium required'), { status: 403 }); },
+});
 const { updateBusiness, getBusinessBySlug } = require('../dist/modules/business/business.controller.js');
 const { businessPayloadSchema } = require('../dist/modules/business/business.schema.js');
 const config = {
