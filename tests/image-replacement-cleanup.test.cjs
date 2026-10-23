@@ -1,0 +1,10 @@
+const {test,beforeEach}=require('node:test');const assert=require('node:assert/strict');
+const stub=(path,exports)=>{const id=require.resolve(path);require.cache[id]={id,filename:id,loaded:true,exports}};
+let references,databaseError,destroyed;
+stub('../dist/config/cloudinary.js',{__esModule:true,default:{uploader:{destroy:async id=>{destroyed.push(id);return {result:'ok'}}}}});
+stub('../dist/config/supabaseClient.js',{supabaseAdmin:{from:table=>({select:()=>({eq:(column,value)=>({limit:async()=>({data:references.has(table+':'+column)?[{id:'other-record'}]:[],error:databaseError})})})})}});
+const {deleteUnreferencedCloudinaryImage}=require('../dist/utils/cloudinaryAsset.js');
+beforeEach(()=>{references=new Set();databaseError=null;destroyed=[]});
+test('replacement cleanup retains an image referenced by another saved record',async()=>{references.add('gallery_photos:image_public_id');await deleteUnreferencedCloudinaryImage('shared-image','product');assert.deepEqual(destroyed,[])});
+test('replacement cleanup fails safe when references cannot be checked',async()=>{databaseError={message:'offline'};await deleteUnreferencedCloudinaryImage('image','product');assert.deepEqual(destroyed,[])});
+test('unreferenced replaced assets can be cleaned up',async()=>{await deleteUnreferencedCloudinaryImage('orphan-image','product');assert.deepEqual(destroyed,['orphan-image'])});

@@ -39,6 +39,7 @@ const authGuard_1 = require("../../middlewares/authGuard");
 const validateRequest_1 = require("../../middlewares/validateRequest");
 const products_schema_1 = require("./products.schema");
 const router = (0, express_1.Router)();
+router.get('/:businessId/products/manage', authGuard_1.authGuard, controller.manageProducts);
 router.post('/:businessId/products', authGuard_1.authGuard, (0, validateRequest_1.validateRequest)(products_schema_1.createProductSchema), controller.createProduct);
 router.get('/:businessId/products', controller.listProducts);
 router.get('/products/:id', controller.getProduct);

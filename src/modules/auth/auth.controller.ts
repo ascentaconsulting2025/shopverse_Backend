@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { issueSession, readRefresh, clearRefresh, sessionId } from './session';
 import { supabaseAdmin, createAuthClient } from '../../config/supabaseClient';
 import { ApiError } from '../../utils/apiError';
 import { asyncHandler } from '../../utils/asyncHandler';
@@ -16,15 +17,14 @@ export const register = asyncHandler(async (req, res) => {
   if (profileError) throw new ApiError(profileError.message, 500);
   const session = await createAuthClient().auth.signInWithPassword({ email: input.email, password: input.password });
   if (session.error) throw new ApiError(session.error.message, 500);
-  res.status(201).json(apiSuccess({ user: data.user, role: 'user', session: session.data.session }));
+  res.status(201).json(apiSuccess(await issueSession(res, session.data.session, data.user, true)));
 });
 
 export const login = asyncHandler(async (req, res) => {
   const input = loginSchema.parse(req.body);
   const { data, error } = await createAuthClient().auth.signInWithPassword(input);
   if (error || !data.session) throw new ApiError(error?.message || 'Invalid email or password', 401);
-  const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(email => email.trim().toLowerCase()).filter(Boolean);
-  res.json(apiSuccess({ user: data.user, role: adminEmails.includes(data.user.email?.toLowerCase() || '') ? 'admin' : 'user', session: data.session }));
+  res.json(apiSuccess(await issueSession(res, data.session, data.user, true)));
 });
 
 export const createUser = asyncHandler(async (req, res) => {
@@ -50,4 +50,58 @@ export const createUser = asyncHandler(async (req, res) => {
   }));
 });
 
-export const logout = asyncHandler(async (_req, res) => res.json(apiSuccess({ message: 'Signed out. Discard the client access token.' })));
+// Coalesce rotation for requests using the same cookie in this process.
+const refreshes = new Map<string, Promise<any>>();
+async function refreshData(token: string) {
+  if (!token) throw new ApiError('No saved session', 401);
+  let pending = refreshes.get(token);
+  if (!pending) {
+    pending = createAuthClient().auth.refreshSession({ refresh_token: token });
+    refreshes.set(token, pending);
+    void pending.finally(() => { setTimeout(() => refreshes.delete(token), 1000).unref(); }).catch(() => {});
+  }
+  const result = await pending;
+  if (result.error || !result.data.session) {
+    const status = result.error?.status;
+    throw new ApiError('Session could not be restored', !status || status >= 500 ? 503 : 401);
+  }
+  return result.data;
+}
+export const refresh = asyncHandler(async (req, res) => {
+  try {
+    const data = await refreshData(readRefresh(req));
+    res.json(apiSuccess(await issueSession(res, data.session, data.user)));
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) clearRefresh(res);
+    throw error;
+  }
+});
+export const logout = asyncHandler(async (req, res) => {
+  const token = readRefresh(req);
+  const bearer = /^Bearer ([^\s]+)$/i.exec(req.headers.authorization || '')?.[1];
+  if (bearer) {
+    const { data, error } = await supabaseAdmin.auth.getUser(bearer);
+    if (!error && data.user) {
+      const revoked = await supabaseAdmin.from('auth_sessions').update({ revoked_at: new Date().toISOString() }).eq('id', sessionId(bearer)).eq('user_id', data.user.id);
+      if (revoked.error) throw new ApiError('Could not revoke session', 503);
+      const provider = await supabaseAdmin.auth.admin.signOut(bearer, 'local');
+      if (provider.error && ![401, 403, 404].includes(provider.error.status || 0)) throw new ApiError('Could not revoke provider session', 503);
+      clearRefresh(res);
+      res.json(apiSuccess({ message: 'Signed out' }));
+      return;
+    }
+  }
+  if (token) {
+    try {
+      const data = await refreshData(token);
+      const { error } = await supabaseAdmin.from('auth_sessions').update({ revoked_at: new Date().toISOString() }).eq('id', sessionId(data.session.access_token));
+      if (error) throw new ApiError('Could not revoke session', 503);
+      const signedOut = await supabaseAdmin.auth.admin.signOut(data.session.access_token, 'local');
+      if (signedOut.error && signedOut.error.status !== 404) throw new ApiError('Could not revoke provider session', 503);
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.status !== 401) throw error;
+    }
+  }
+  clearRefresh(res);
+  res.json(apiSuccess({ message: 'Signed out' }));
+});

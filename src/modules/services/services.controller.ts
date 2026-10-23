@@ -5,7 +5,7 @@ import { ApiError } from '../../utils/apiError';
 import { apiSuccess } from '../../utils/apiResponse';
 import { supabaseAdmin } from '../../config/supabaseClient';
 import { requireService, servicesService } from './services.service';
-import { cloudinaryPublicIdFromUrl, deleteCloudinaryImage } from '../../utils/cloudinaryAsset';
+import { cloudinaryPublicIdFromUrl, deleteCloudinaryImage, deleteUnreferencedCloudinaryImage } from '../../utils/cloudinaryAsset';
 
 const requireBusinessOwner = async (businessId: string, userId: string, isAdmin = false) => {
   const { data } = await supabaseAdmin.from('businesses').select('id, owner_id').eq('id', businessId).single();
@@ -47,13 +47,15 @@ export const updateService = asyncHandler(async (req, res) => {
   await requireBusinessOwner(existing.business_id, (req as any).user.id, (req as any).isAdmin);
   if (req.body.isPublished === true && existing.is_published === false) await requirePackageFeature(existing.business_id, 'services');
   await validateCategory(existing.business_id, 'service', req.body.categoryId);
+  const saved = await servicesService.update(req.params.id, req.body);
   if (req.body.image !== undefined) {
     const nextPublicId = req.body.imagePublicId || cloudinaryPublicIdFromUrl(req.body.image);
     if (existing.cover_image_public_id && existing.cover_image_public_id !== nextPublicId) {
-      await deleteCloudinaryImage(existing.cover_image_public_id, existing.id);
+      // Preserve the successful save even if non-critical cleanup is unavailable.
+      void deleteUnreferencedCloudinaryImage(existing.cover_image_public_id, existing.id).catch(error => console.error('Replacement cleanup failed', error));
     }
   }
-  res.json(apiSuccess(toService(await servicesService.update(req.params.id, req.body))));
+  res.json(apiSuccess(toService(saved)));
 });
 
 export const deleteService = asyncHandler(async (req, res) => {

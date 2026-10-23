@@ -33,6 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+const rateLimiter_1 = require("../../middlewares/rateLimiter");
 const express_1 = require("express");
 const controller = __importStar(require("./business.controller"));
 const authGuard_1 = require("../../middlewares/authGuard");
@@ -46,6 +47,7 @@ router.post('/', authGuard_1.authGuard, (0, validateRequest_1.validateRequest)(b
 router.get('/:id/section-visibility', authGuard_1.authGuard, controller.getSectionVisibility);
 router.patch('/:id/section-visibility', authGuard_1.authGuard, controller.updateSectionVisibility);
 router.get('/:id/usage', authGuard_1.authGuard, controller.getBusinessUsage);
+router.post('/:slug/views', rateLimiter_1.publicRateLimiter, controller.recordProfileView);
 router.get('/:slug', controller.getBusinessBySlug);
 router.patch('/:id', authGuard_1.authGuard, (0, validateRequest_1.validateRequest)(business_schema_1.businessPayloadSchema), controller.updateBusiness);
 router.delete('/:id', authGuard_1.authGuard, controller.deleteBusiness);

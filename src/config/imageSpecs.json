@@ -1,0 +1,42 @@
+{
+  "profile": {
+    "width": 512,
+    "height": 512
+  },
+  "logo": {
+    "width": 512,
+    "height": 512
+  },
+  "square": {
+    "width": 512,
+    "height": 512
+  },
+  "product": {
+    "width": 1200,
+    "height": 900
+  },
+  "service": {
+    "width": 1200,
+    "height": 900
+  },
+  "gallery": {
+    "width": 1200,
+    "height": 900
+  },
+  "event": {
+    "width": 1200,
+    "height": 900
+  },
+  "offer": {
+    "width": 1200,
+    "height": 900
+  },
+  "landscape": {
+    "width": 1200,
+    "height": 900
+  },
+  "banner": {
+    "width": 1600,
+    "height": 900
+  }
+}

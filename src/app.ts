@@ -38,6 +38,7 @@ app.use(cors({
     if (!origin || allowedCorsOrigins.has(origin)) return callback(null, true);
     callback(new Error('Origin not allowed by CORS'));
   },
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
@@ -46,6 +47,16 @@ app.use(morgan('dev'));
 app.use(json());
 app.use(urlencoded({ extended: true }));
 
+// Credential-bearing mutations must originate from a configured frontend.
+app.use('/api/v1/auth', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const origin = req.headers.origin;
+  if (req.method !== 'GET' && req.method !== 'OPTIONS' &&
+      (origin ? !allowedCorsOrigins.has(origin) : !!req.headers.cookie || req.headers['sec-fetch-site'] === 'cross-site')) {
+    return res.status(403).json({ success: false, error: { message: 'Untrusted authentication origin' } });
+  }
+  next();
+});
 app.use('/api/v1', routes);
 
 app.use(errorHandler);

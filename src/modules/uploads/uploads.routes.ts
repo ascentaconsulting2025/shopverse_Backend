@@ -1,3 +1,4 @@
+import imageSpecs from '../../config/imageSpecs.json';
 import { Router } from 'express';
 import multer from 'multer';
 import { authGuard } from '../../middlewares/authGuard';
@@ -29,13 +30,16 @@ router.post('/', authGuard, uploadsRateLimiter, upload.single('image'), async (r
       return res.status(400).json({ success: false, error: { message: 'An image file is required.' } });
     }
 
+    const imageType = req.body.imageType as keyof typeof imageSpecs;
+    if (!Object.prototype.hasOwnProperty.call(imageSpecs, imageType)) return res.status(400).json({ success: false, error: { message: 'A valid imageType is required.' } });
+    const spec = imageSpecs[imageType];
     console.info('Image selected');
     console.info('Upload started');
     console.info('Cloudinary upload request sent');
 
     const result = await new Promise<any>((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
-        { folder: 'shopverse/uploads', resource_type: 'image' },
+        { folder: 'shopverse/uploads', context: { owner_id: (req as any).user.id, image_type: imageType }, resource_type: 'image', allowed_formats: ['jpg', 'jpeg', 'png', 'webp'], transformation: [{ width: spec.width, height: spec.height, crop: imageType === 'logo' ? 'pad' : 'fill', background: 'white' }] },
         (error, uploadResult) => error ? reject(error) : resolve(uploadResult),
       );
       stream.end(req.file!.buffer);
@@ -47,6 +51,10 @@ router.post('/', authGuard, uploadsRateLimiter, upload.single('image'), async (r
     if (!result?.secure_url) throw new Error('Cloudinary response did not include secure_url.');
     console.info('secure_url received');
 
+    if (result.width !== spec.width || result.height !== spec.height || !['jpg', 'jpeg', 'png', 'webp'].includes(result.format)) {
+      await cloudinary.uploader.destroy(result.public_id, { resource_type: 'image' });
+      return res.status(422).json({ success: false, error: { message: 'Image processing failed. Please try another image.' } });
+    }
     const response = {
       secure_url: result.secure_url,
       public_id: result.public_id,

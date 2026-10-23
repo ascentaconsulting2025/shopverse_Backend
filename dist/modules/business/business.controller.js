@@ -1,6 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getBusinessUsage = exports.updateSectionVisibility = exports.getSectionVisibility = exports.listMyBusinesses = exports.deleteBusiness = exports.updateBusiness = exports.listMarketplace = exports.getBusinessCount = exports.getBusinessBySlug = exports.createBusiness = void 0;
+exports.recordProfileView = exports.getBusinessUsage = exports.updateSectionVisibility = exports.getSectionVisibility = exports.listMyBusinesses = exports.deleteBusiness = exports.updateBusiness = exports.listMarketplace = exports.getBusinessCount = exports.getBusinessBySlug = exports.createBusiness = void 0;
+const node_crypto_1 = require("node:crypto");
+const env_1 = require("../../config/env");
+const packages_service_1 = require("../packages/packages.service");
+const categories_service_1 = require("../categories/categories.service");
 const asyncHandler_1 = require("../../utils/asyncHandler");
 const apiError_1 = require("../../utils/apiError");
 const apiResponse_1 = require("../../utils/apiResponse");
@@ -35,7 +39,7 @@ async function requireOwnedBusiness(businessId, req) {
 }
 const missingPhoneColumn = (error) => (error?.code === 'PGRST204' || error?.code === '42703') && /phone/i.test(error.message || '');
 const toService = (row) => ({
-    id: row.id,
+    id: row.id, categoryId: row.folder_category_id ?? null, isPublished: row.is_published !== false,
     name: { en: row.name_en ?? row.name ?? '', mr: row.name_mr ?? row.name ?? '' },
     description: { en: row.details_en ?? row.details ?? '', mr: row.details_mr ?? row.details ?? '' },
     startingPrice: row.starting_price == null || Number(row.starting_price) <= 0 ? undefined : Number(row.starting_price),
@@ -46,7 +50,8 @@ const toService = (row) => ({
     updatedAt: row.updated_at,
 });
 const toProduct = (row) => ({
-    id: row.id,
+    images: row.images || [], specifications: row.specifications || {},
+    id: row.id, categoryId: row.folder_category_id ?? null, isPublished: row.is_published !== false,
     name: { en: row.name_en ?? row.name ?? '', mr: row.name_mr ?? row.name ?? '' },
     description: { en: row.description_en ?? row.description ?? '', mr: row.description_mr ?? row.description ?? '' },
     price: row.price == null || Number(row.price) <= 0 ? undefined : Number(row.price),
@@ -72,12 +77,21 @@ async function loadServices(businessId) {
         return null;
     return data || [];
 }
-async function loadContent(businessId) {
+async function loadContent(businessId, includeInactive = false) {
+    const query = (table) => {
+        let result = supabaseClient_1.supabaseAdmin.from(table).select('*').eq('business_id', businessId).is('deleted_at', null);
+        if (!includeInactive)
+            result = result.eq('is_active', true);
+        return result;
+    };
     const [events, offers, gallery] = await Promise.all([
-        supabaseClient_1.supabaseAdmin.from('events').select('*').eq('business_id', businessId).eq('is_active', true).is('deleted_at', null).order('created_at', { ascending: false }),
-        supabaseClient_1.supabaseAdmin.from('offers').select('*').eq('business_id', businessId).eq('is_active', true).is('deleted_at', null).order('created_at', { ascending: false }),
-        supabaseClient_1.supabaseAdmin.from('gallery_photos').select('*').eq('business_id', businessId).eq('is_active', true).is('deleted_at', null).order('sort_order').order('created_at', { ascending: false }),
+        query('events').order('created_at', { ascending: false }),
+        query('offers').order('created_at', { ascending: false }),
+        query('gallery_photos').order('sort_order').order('created_at', { ascending: false }),
     ]);
+    const failed = [events, offers, gallery].find(result => result.error);
+    if (failed?.error)
+        throw new apiError_1.ApiError(failed.error.message, 400);
     return { events: events.data || [], offers: offers.data || [], gallery: gallery.data || [] };
 }
 async function loadPeople(businessId, includeInactive = false) {
@@ -126,7 +140,7 @@ async function savePeople(businessId, people) {
             description_en: person.description?.en || null,
             description_mr: person.description?.mr || null,
             profile_image_url: person.profileImage || null,
-            profile_image_public_id: person.profileImagePublicId || null,
+            profile_image_public_id: person.profileImagePublicId || (0, cloudinaryAsset_1.cloudinaryPublicIdFromUrl)(person.profileImage) || null,
             display_order: person.displayOrder ?? 0,
             is_primary: person.isPrimary === true,
             is_active: person.isActive !== false,
@@ -146,15 +160,24 @@ async function insertBusiness(card, ownerId) {
     }
     return result;
 }
-async function saveBusiness(id, card) {
-    let result = await supabaseClient_1.supabaseAdmin.from('businesses').update((0, business_mapper_1.toBusinessWrite)(card)).eq('id', id).select().single();
+async function saveBusiness(id, card, trusted) {
+    const payload = (phone = true) => {
+        const value = (0, business_mapper_1.toBusinessWrite)(card, undefined, phone);
+        if (!trusted.plan)
+            delete value.plan_id;
+        if (!trusted.verification)
+            delete value.is_verified;
+        return value;
+    };
+    let result = await supabaseClient_1.supabaseAdmin.from('businesses').update(payload()).eq('id', id).select().single();
     if (missingPhoneColumn(result.error)) {
-        result = await supabaseClient_1.supabaseAdmin.from('businesses').update((0, business_mapper_1.toBusinessWrite)(card, undefined, false)).eq('id', id).select().single();
+        result = await supabaseClient_1.supabaseAdmin.from('businesses').update(payload(false)).eq('id', id).select().single();
     }
     return result;
 }
 exports.createBusiness = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const user = req.user;
+    (0, packages_service_1.protectBusinessFields)(req.body, null, !!req.isAdmin);
     const name = typeof req.body.businessName === 'object'
         ? req.body.businessName.en || req.body.businessName.mr
         : req.body.businessName;
@@ -184,8 +207,9 @@ exports.getBusinessBySlug = (0, asyncHandler_1.asyncHandler)(async (req, res) =>
     res.json((0, apiResponse_1.apiSuccess)({
         ...card,
         sectionVisibility: { products: visibility.products, services: visibility.services, offers: visibility.special_offers, gallery: visibility.photo_gallery, events: visibility.upcoming_events },
-        products: products.map(toProduct),
-        ...(services ? { services: services.map(toService) } : {}),
+        categories: (await (0, categories_service_1.loadCategories)(data.id)).filter(c => c.is_published),
+        products: (await (0, categories_service_1.publicItems)(data.id, 'product', products)).map(toProduct),
+        services: (await (0, categories_service_1.publicItems)(data.id, 'service', services || [])).map(toService),
         events: content.events.map(toEvent), offers: content.offers.map(toOffer), gallery: content.gallery.map(toGallery),
         people,
     }));
@@ -229,8 +253,8 @@ exports.listMarketplace = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             address: card.address,
             isVerified: card.isVerified,
             people,
-            products: products.filter((item) => item.is_available !== false).map(toProduct),
-            services: (services || []).map(toService),
+            products: (await (0, categories_service_1.publicItems)(row.id, 'product', products.filter(item => item.is_available !== false))).map(toProduct),
+            services: (await (0, categories_service_1.publicItems)(row.id, 'service', services || [])).map(toService),
             events: content.events.filter((item) => item.is_active !== false).map(toEvent),
         };
     }));
@@ -272,27 +296,35 @@ exports.updateBusiness = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         throw new apiError_1.ApiError('Business not found', 404);
     if (current.owner_id !== user.id && !req.isAdmin)
         throw new apiError_1.ApiError('You do not own this business', 403);
-    const themeChanged = ['themeConfig', 'themeDraft'].some(key => req.body[key] != null && JSON.stringify(req.body[key]) !== JSON.stringify(current.details?.[key]));
-    if (themeChanged && current.plan_id !== 'premium') {
-        throw new apiError_1.ApiError('Premium plan is required to save or publish a custom theme', 403);
-    }
+    const trusted = { plan: !!req.isAdmin && req.body.planId !== undefined, verification: !!req.isAdmin && req.body.isVerified !== undefined };
+    (0, packages_service_1.protectBusinessFields)(req.body, current, !!req.isAdmin);
+    const themeChanged = ['themeConfig', 'themeDraft', 'templateId', 'themeColor', 'accentColor', 'fontFamily'].some(key => req.body[key] !== undefined && JSON.stringify(req.body[key]) !== JSON.stringify(current.details?.[key]));
+    if (themeChanged)
+        await (0, packages_service_1.requirePackageFeature)(current.id, 'themes');
     const merged = { ...(0, business_mapper_1.toCard)(current), ...req.body, id: current.id, slug: req.body.slug ?? current.slug };
+    for (const key of ['products', 'services', 'offers', 'events', 'gallery', 'package'])
+        delete merged[key];
+    merged.stats = current.details?.stats || {};
     const nextLogoPublicId = (0, business_mapper_1.toBusinessWrite)(merged).logo_public_id;
-    if (current.logo_public_id && current.logo_public_id !== nextLogoPublicId) {
-        await (0, cloudinaryAsset_1.deleteCloudinaryImage)(current.logo_public_id, current.id);
-    }
-    const { data, error } = await saveBusiness(current.id, merged);
+    const { data, error } = await saveBusiness(current.id, merged, trusted);
     if (error) {
         if (error.code === '23505' && /slug/i.test(error.message || '')) {
             throw new apiError_1.ApiError('This slug is already in use. Please choose another slug.', 409);
         }
+        if (/requires (?:Premium|Standard or Premium)/.test(error.message || ''))
+            throw new apiError_1.ApiError(error.message, 403);
         throw new apiError_1.ApiError('Unable to update business information', 400);
     }
+    if (current.logo_public_id && current.logo_public_id !== nextLogoPublicId) {
+        void (0, cloudinaryAsset_1.deleteUnreferencedCloudinaryImage)(current.logo_public_id, current.id).catch(error => console.error('Logo replacement cleanup failed', error));
+    }
     await savePeople(current.id, req.body.people);
-    res.json((0, apiResponse_1.apiSuccess)({ ...(0, business_mapper_1.toCard)(data), people: await loadPeople(current.id, true) }));
+    const content = await loadContent(current.id, true);
+    res.json((0, apiResponse_1.apiSuccess)({ ...(0, business_mapper_1.toCard)(data), events: content.events.map(toEvent), offers: content.offers.map(toOffer), gallery: content.gallery.map(toGallery), categories: await (0, categories_service_1.loadCategories)(current.id), products: (await loadProducts(current.id)).map(toProduct), services: (await loadServices(current.id) || []).map(toService), people: await loadPeople(current.id, true) }));
 });
 exports.deleteBusiness = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const user = req.user;
+    const { password } = business_schema_1.deleteBusinessSchema.parse(req.body);
     const { data: current, error: findError } = await supabaseClient_1.supabaseAdmin
         .from('businesses')
         .select('id, owner_id, logo_public_id')
@@ -302,6 +334,15 @@ exports.deleteBusiness = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         throw new apiError_1.ApiError('Business not found', 404);
     if (current.owner_id !== user.id && !req.isAdmin)
         throw new apiError_1.ApiError('You do not own this business', 403);
+    if (!user.email)
+        throw new apiError_1.ApiError('A password-based account is required to delete a business', 400);
+    const verification = await (0, supabaseClient_1.createAuthClient)().auth.signInWithPassword({
+        email: user.email,
+        password,
+    });
+    if (verification.error || verification.data.user?.id !== user.id) {
+        throw new apiError_1.ApiError('Password is incorrect', 401);
+    }
     const [products, services, events, gallery] = await Promise.all([
         supabaseClient_1.supabaseAdmin.from('products').select('id, image_public_id').eq('business_id', current.id),
         supabaseClient_1.supabaseAdmin.from('services').select('id, cover_image_public_id').eq('business_id', current.id),
@@ -331,11 +372,13 @@ exports.listMyBusinesses = (0, asyncHandler_1.asyncHandler)(async (req, res) => 
     if (error)
         throw new apiError_1.ApiError(error.message, 400);
     const cards = await Promise.all(data.map(async (row) => {
-        const [products, services, visibility, people] = await Promise.all([loadProducts(row.id), loadServices(row.id), loadVisibility(row.id), loadPeople(row.id, true)]);
+        const [products, services, visibility, people, content] = await Promise.all([loadProducts(row.id), loadServices(row.id), loadVisibility(row.id), loadPeople(row.id, true), loadContent(row.id, true)]);
         const card = (0, business_mapper_1.toCard)(row);
         return {
             ...card,
+            events: content.events.map(toEvent), offers: content.offers.map(toOffer), gallery: content.gallery.map(toGallery),
             sectionVisibility: { products: visibility.products, services: visibility.services, offers: visibility.special_offers, gallery: visibility.photo_gallery, events: visibility.upcoming_events },
+            categories: await (0, categories_service_1.loadCategories)(row.id),
             products: products.map(toProduct),
             ...(services ? { services: services.map(toService) } : {}),
             people,
@@ -361,15 +404,18 @@ exports.updateSectionVisibility = (0, asyncHandler_1.asyncHandler)(async (req, r
 });
 exports.getBusinessUsage = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     await requireOwnedBusiness(req.params.id, req);
-    const [products, services, offers, gallery, events] = await Promise.all([
-        supabaseClient_1.supabaseAdmin.from('products').select('id', { count: 'exact', head: true }).eq('business_id', req.params.id),
-        supabaseClient_1.supabaseAdmin.from('services').select('id', { count: 'exact', head: true }).eq('business_id', req.params.id),
-        supabaseClient_1.supabaseAdmin.from('offers').select('id', { count: 'exact', head: true }).eq('business_id', req.params.id).eq('is_active', true).is('deleted_at', null),
-        supabaseClient_1.supabaseAdmin.from('gallery_photos').select('id', { count: 'exact', head: true }).eq('business_id', req.params.id).eq('is_active', true).is('deleted_at', null),
-        supabaseClient_1.supabaseAdmin.from('events').select('id', { count: 'exact', head: true }).eq('business_id', req.params.id).eq('is_active', true).is('deleted_at', null),
-    ]);
-    const failed = [products, services, offers, gallery, events].find((item) => item.error);
-    if (failed?.error)
-        throw new apiError_1.ApiError(failed.error.message, 400);
-    res.json((0, apiResponse_1.apiSuccess)({ products: products.count || 0, services: services.count || 0, offers: offers.count || 0, gallery: gallery.count || 0, events: events.count || 0 }));
+    const pkg = await (0, packages_service_1.getBusinessPackage)(req.params.id);
+    res.json((0, apiResponse_1.apiSuccess)({ ...pkg.usage, ...pkg }));
+});
+exports.recordProfileView = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    // Use Express's trusted address; never accept a client-supplied count or visitor ID.
+    const visitorHash = (0, node_crypto_1.createHmac)('sha256', env_1.env.SUPABASE_SERVICE_ROLE_KEY)
+        .update(`${req.ip || req.socket.remoteAddress}|${new Date().toISOString().slice(0, 10)}`)
+        .digest('hex');
+    const { data, error } = await supabaseClient_1.supabaseAdmin.rpc('record_business_profile_view', {
+        p_slug: req.params.slug, p_visitor_hash: visitorHash,
+    });
+    if (error)
+        throw new apiError_1.ApiError(error.message === 'Business not found' ? error.message : 'Could not record profile view', error.message === 'Business not found' ? 404 : 503);
+    res.json((0, apiResponse_1.apiSuccess)(data));
 });
