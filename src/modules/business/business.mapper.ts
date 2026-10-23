@@ -66,11 +66,11 @@ export function toCard(row: any): any {
     socialLinks,
     status: row.status || (row.is_published ? 'active' : (details.status || 'draft')),
     isVerified: row.is_verified ?? details.isVerified ?? false,
-    planId: row.plan_id || details.planId || 'free',
+    planId: row.plan_id || 'basic',
     createdAt: row.created_at,
     products: details.products || [], services: details.services || [], gallery: details.gallery || [],
     offers: details.offers || [], events: details.events || [], reviews: details.reviews || [],
-    stats: { ...baseStats, ...(details.stats || {}) },
+    stats: { ...baseStats, ...(details.stats || {}), totalViews: Number(row.profile_views || 0) },
   };
 }
 
@@ -91,6 +91,8 @@ export function toBusinessPerson(row: any) {
 export function toBusinessWrite(card: Record<string, any>, ownerId?: string, includePhone = true) {
   const name = typeof card.businessName === 'object' ? card.businessName.en || card.businessName.mr : card.businessName;
   const category = typeof card.category === 'object' ? card.category.en || card.category.mr : card.category;
+  const details = { ...card };
+  for (const key of ['products','services','events','offers','gallery','package','details','profile_views','profileViews','plan_id','is_verified','owner_id']) delete details[key];
   return {
     ...(ownerId ? { owner_id: ownerId } : {}),
     business_name: name || 'Untitled business', business_name_mr: nullableMarathi(card.businessName), slug: card.slug,
@@ -108,7 +110,7 @@ export function toBusinessWrite(card: Record<string, any>, ownerId?: string, inc
     address: card.address || null, social_links: card.socialLinks || null,
     status: card.status || 'draft',
     is_verified: card.isVerified ?? false,
-    plan_id: card.planId || 'free',
-    is_published: card.status === 'active', details: card,
+    plan_id: card.planId || 'basic',
+    is_published: card.status === 'active', details,
   };
 }

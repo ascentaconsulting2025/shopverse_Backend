@@ -1,3 +1,4 @@
+import { publicRateLimiter } from '../../middlewares/rateLimiter';
 import { Router } from 'express';
 import * as controller from './business.controller';
 import { authGuard } from '../../middlewares/authGuard';
@@ -13,6 +14,7 @@ router.post('/', authGuard, validateRequest(businessPayloadSchema), controller.c
 router.get('/:id/section-visibility', authGuard, controller.getSectionVisibility);
 router.patch('/:id/section-visibility', authGuard, controller.updateSectionVisibility);
 router.get('/:id/usage', authGuard, controller.getBusinessUsage);
+router.post('/:slug/views', publicRateLimiter, controller.recordProfileView);
 router.get('/:slug', controller.getBusinessBySlug);
 router.patch('/:id', authGuard, validateRequest(businessPayloadSchema), controller.updateBusiness);
 router.delete('/:id', authGuard, controller.deleteBusiness);

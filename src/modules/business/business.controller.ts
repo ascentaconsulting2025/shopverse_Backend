@@ -1,3 +1,6 @@
+import { createHmac } from 'node:crypto';
+import { env } from '../../config/env';
+import { getBusinessPackage, protectBusinessFields, requirePackageFeature } from '../packages/packages.service';
 import { loadCategories, publicItems } from '../categories/categories.service';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { ApiError } from '../../utils/apiError';
@@ -77,12 +80,19 @@ async function loadServices(businessId: string) {
   return data || [];
 }
 
-async function loadContent(businessId: string) {
+async function loadContent(businessId: string, includeInactive = false) {
+  const query = (table: string) => {
+    let result = supabaseAdmin.from(table).select('*').eq('business_id', businessId).is('deleted_at', null);
+    if (!includeInactive) result = result.eq('is_active', true);
+    return result;
+  };
   const [events, offers, gallery] = await Promise.all([
-    supabaseAdmin.from('events').select('*').eq('business_id', businessId).eq('is_active', true).is('deleted_at', null).order('created_at', { ascending: false }),
-    supabaseAdmin.from('offers').select('*').eq('business_id', businessId).eq('is_active', true).is('deleted_at', null).order('created_at', { ascending: false }),
-    supabaseAdmin.from('gallery_photos').select('*').eq('business_id', businessId).eq('is_active', true).is('deleted_at', null).order('sort_order').order('created_at', { ascending: false }),
+    query('events').order('created_at', { ascending: false }),
+    query('offers').order('created_at', { ascending: false }),
+    query('gallery_photos').order('sort_order').order('created_at', { ascending: false }),
   ]);
+  const failed = [events, offers, gallery].find(result => result.error);
+  if (failed?.error) throw new ApiError(failed.error.message, 400);
   return { events: events.data || [], offers: offers.data || [], gallery: gallery.data || [] };
 }
 
@@ -147,16 +157,23 @@ async function insertBusiness(card: Record<string, any>, ownerId: string) {
   return result;
 }
 
-async function saveBusiness(id: string, card: Record<string, any>) {
-  let result = await supabaseAdmin.from('businesses').update(toBusinessWrite(card)).eq('id', id).select().single();
+async function saveBusiness(id: string, card: Record<string, any>, trusted: { plan: boolean; verification: boolean }) {
+  const payload = (phone = true) => {
+    const value: any = toBusinessWrite(card, undefined, phone);
+    if (!trusted.plan) delete value.plan_id;
+    if (!trusted.verification) delete value.is_verified;
+    return value;
+  };
+  let result = await supabaseAdmin.from('businesses').update(payload()).eq('id', id).select().single();
   if (missingPhoneColumn(result.error)) {
-    result = await supabaseAdmin.from('businesses').update(toBusinessWrite(card, undefined, false)).eq('id', id).select().single();
+    result = await supabaseAdmin.from('businesses').update(payload(false)).eq('id', id).select().single();
   }
   return result;
 }
 
 export const createBusiness = asyncHandler(async (req, res) => {
   const user = (req as any).user;
+  protectBusinessFields(req.body, null, !!(req as any).isAdmin);
   const name = typeof req.body.businessName === 'object'
     ? req.body.businessName.en || req.body.businessName.mr
     : req.body.businessName;
@@ -275,26 +292,30 @@ export const updateBusiness = asyncHandler(async (req, res) => {
   const { data: current, error: findError } = await supabaseAdmin.from('businesses').select('*').eq('id', req.params.id).single();
   if (findError || !current) throw new ApiError('Business not found', 404);
   if (current.owner_id !== user.id && !(req as any).isAdmin) throw new ApiError('You do not own this business', 403);
-  const themeChanged = ['themeConfig', 'themeDraft'].some(key =>
-    req.body[key] != null && JSON.stringify(req.body[key]) !== JSON.stringify(current.details?.[key]),
+  const trusted = { plan: !!(req as any).isAdmin && req.body.planId !== undefined, verification: !!(req as any).isAdmin && req.body.isVerified !== undefined };
+  protectBusinessFields(req.body, current, !!(req as any).isAdmin);
+  const themeChanged = ['themeConfig', 'themeDraft', 'templateId', 'themeColor', 'accentColor', 'fontFamily'].some(key =>
+    req.body[key] !== undefined && JSON.stringify(req.body[key]) !== JSON.stringify(current.details?.[key]),
   );
-  if (themeChanged && current.plan_id !== 'premium') {
-    throw new ApiError('Premium plan is required to save or publish a custom theme', 403);
-  }
+  if (themeChanged) await requirePackageFeature(current.id, 'themes');
   const merged = { ...toCard(current), ...req.body, id: current.id, slug: req.body.slug ?? current.slug };
+  for (const key of ['products','services','offers','events','gallery','package']) delete merged[key];
+  merged.stats = current.details?.stats || {};
   const nextLogoPublicId = toBusinessWrite(merged).logo_public_id;
   if (current.logo_public_id && current.logo_public_id !== nextLogoPublicId) {
     await deleteCloudinaryImage(current.logo_public_id, current.id);
   }
-  const { data, error } = await saveBusiness(current.id, merged);
+  const { data, error } = await saveBusiness(current.id, merged, trusted);
   if (error) {
     if (error.code === '23505' && /slug/i.test(error.message || '')) {
       throw new ApiError('This slug is already in use. Please choose another slug.', 409);
     }
+    if (/requires (?:Premium|Standard or Premium)/.test(error.message || '')) throw new ApiError(error.message, 403);
     throw new ApiError('Unable to update business information', 400);
   }
   await savePeople(current.id, req.body.people);
-  res.json(apiSuccess({ ...toCard(data), categories: await loadCategories(current.id), products: (await loadProducts(current.id)).map(toProduct), services: (await loadServices(current.id) || []).map(toService), people: await loadPeople(current.id, true) }));
+  const content = await loadContent(current.id, true);
+  res.json(apiSuccess({ ...toCard(data), events: content.events.map(toEvent), offers: content.offers.map(toOffer), gallery: content.gallery.map(toGallery), categories: await loadCategories(current.id), products: (await loadProducts(current.id)).map(toProduct), services: (await loadServices(current.id) || []).map(toService), people: await loadPeople(current.id, true) }));
 });
 
 export const deleteBusiness = asyncHandler(async (req, res) => {
@@ -344,10 +365,11 @@ export const listMyBusinesses = asyncHandler(async (req, res) => {
   const { data, error } = await query;
   if (error) throw new ApiError(error.message, 400);
   const cards = await Promise.all(data.map(async (row) => {
-    const [products, services, visibility, people] = await Promise.all([loadProducts(row.id), loadServices(row.id), loadVisibility(row.id), loadPeople(row.id, true)]);
+    const [products, services, visibility, people, content] = await Promise.all([loadProducts(row.id), loadServices(row.id), loadVisibility(row.id), loadPeople(row.id, true), loadContent(row.id, true)]);
     const card = toCard(row);
     return {
       ...card,
+      events: content.events.map(toEvent), offers: content.offers.map(toOffer), gallery: content.gallery.map(toGallery),
       sectionVisibility: { products: visibility.products, services: visibility.services, offers: visibility.special_offers, gallery: visibility.photo_gallery, events: visibility.upcoming_events },
       categories: await loadCategories(row.id),
       products: products.map(toProduct),
@@ -377,14 +399,18 @@ export const updateSectionVisibility = asyncHandler(async (req, res) => {
 
 export const getBusinessUsage = asyncHandler(async (req, res) => {
   await requireOwnedBusiness(req.params.id, req);
-  const [products, services, offers, gallery, events] = await Promise.all([
-    supabaseAdmin.from('products').select('id', { count: 'exact', head: true }).eq('business_id', req.params.id),
-    supabaseAdmin.from('services').select('id', { count: 'exact', head: true }).eq('business_id', req.params.id),
-    supabaseAdmin.from('offers').select('id', { count: 'exact', head: true }).eq('business_id', req.params.id).eq('is_active', true).is('deleted_at', null),
-    supabaseAdmin.from('gallery_photos').select('id', { count: 'exact', head: true }).eq('business_id', req.params.id).eq('is_active', true).is('deleted_at', null),
-    supabaseAdmin.from('events').select('id', { count: 'exact', head: true }).eq('business_id', req.params.id).eq('is_active', true).is('deleted_at', null),
-  ]);
-  const failed = [products, services, offers, gallery, events].find((item) => item.error);
-  if (failed?.error) throw new ApiError(failed.error.message, 400);
-  res.json(apiSuccess({ products: products.count || 0, services: services.count || 0, offers: offers.count || 0, gallery: gallery.count || 0, events: events.count || 0 }));
+  const pkg = await getBusinessPackage(req.params.id);
+  res.json(apiSuccess({ ...pkg.usage, ...pkg }));
+});
+
+export const recordProfileView = asyncHandler(async (req, res) => {
+  // Use Express's trusted address; never accept a client-supplied count or visitor ID.
+  const visitorHash = createHmac('sha256', env.SUPABASE_SERVICE_ROLE_KEY)
+    .update(`${req.ip || req.socket.remoteAddress}|${new Date().toISOString().slice(0, 10)}`)
+    .digest('hex');
+  const { data, error } = await supabaseAdmin.rpc('record_business_profile_view', {
+    p_slug: req.params.slug, p_visitor_hash: visitorHash,
+  });
+  if (error) throw new ApiError(error.message === 'Business not found' ? error.message : 'Could not record profile view', error.message === 'Business not found' ? 404 : 503);
+  res.json(apiSuccess(data));
 });
