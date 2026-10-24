@@ -9,6 +9,7 @@ const router = Router();
 router.post('/register', validateRequest(registerSchema), controller.register);
 router.post('/login', validateRequest(loginSchema), controller.login);
 router.post('/admin/users', authGuard, validateRequest(adminCreateUserSchema), controller.createUser);
+router.post('/refresh', controller.refresh);
 router.post('/logout', controller.logout);
 
 export default router;

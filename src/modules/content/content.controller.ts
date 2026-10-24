@@ -4,7 +4,7 @@ import { ApiError } from '../../utils/apiError';
 import { apiSuccess } from '../../utils/apiResponse';
 import { supabaseAdmin } from '../../config/supabaseClient';
 import { contentService, requireContent } from './content.service';
-import { cloudinaryPublicIdFromUrl, deleteCloudinaryImage } from '../../utils/cloudinaryAsset';
+import { cloudinaryPublicIdFromUrl, deleteCloudinaryImage, deleteUnreferencedCloudinaryImage } from '../../utils/cloudinaryAsset';
 
 type Kind = 'events' | 'offers' | 'gallery';
 const requireOwner = async (businessId: string, req: any) => {
@@ -36,7 +36,7 @@ export const makeContentController = (kind: Kind) => ({
     }
     const updated = await contentService.update(kind, req.params.id, req.body);
     if (replacedImagePublicId) {
-      deleteCloudinaryImage(replacedImagePublicId, current.id).catch((error) =>
+      deleteUnreferencedCloudinaryImage(replacedImagePublicId, current.id).catch((error) =>
         console.error('Cloudinary cleanup failed after content image update', {
           contentId: current.id,
           publicId: replacedImagePublicId,

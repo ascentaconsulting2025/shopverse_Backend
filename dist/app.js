@@ -11,6 +11,10 @@ const express_2 = require("express");
 const errorHandler_1 = require("./middlewares/errorHandler");
 const routes_1 = __importDefault(require("./routes"));
 const app = (0, express_1.default)();
+// Opt in only to deployment-owned proxy addresses, so forwarded client IPs are trusted narrowly.
+const trustedProxies = (process.env.TRUSTED_PROXY_CIDRS || '').split(',').map(value => value.trim()).filter(Boolean);
+if (trustedProxies.length)
+    app.set('trust proxy', trustedProxies);
 const defaultCorsOrigins = [
     'http://localhost:3000',
     'http://localhost:3001',
@@ -39,6 +43,7 @@ app.use((0, cors_1.default)({
             return callback(null, true);
         callback(new Error('Origin not allowed by CORS'));
     },
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
 }));
@@ -46,6 +51,16 @@ app.use((0, helmet_1.default)());
 app.use((0, morgan_1.default)('dev'));
 app.use((0, express_2.json)());
 app.use((0, express_2.urlencoded)({ extended: true }));
+// Credential-bearing mutations must originate from a configured frontend.
+app.use('/api/v1/auth', (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const origin = req.headers.origin;
+    if (req.method !== 'GET' && req.method !== 'OPTIONS' &&
+        (origin ? !allowedCorsOrigins.has(origin) : !!req.headers.cookie || req.headers['sec-fetch-site'] === 'cross-site')) {
+        return res.status(403).json({ success: false, error: { message: 'Untrusted authentication origin' } });
+    }
+    next();
+});
 app.use('/api/v1', routes_1.default);
 app.use(errorHandler_1.errorHandler);
 exports.default = app;

@@ -5,10 +5,11 @@ const envPath=require.resolve('../dist/config/env.js');
 const serviceKey='test-service-role-key';
 require.cache[envPath]={id:envPath,filename:envPath,loaded:true,exports:{env:{SUPABASE_URL:'https://test.supabase.co',SUPABASE_SERVICE_ROLE_KEY:serviceKey,SUPABASE_ANON_KEY:'test-anon-key'}}};
 const calls=[];
-const token=Buffer.from('{}').toString('base64url')+'.'+Buffer.from(JSON.stringify({sub:'owner',role:'authenticated',exp:Math.floor(Date.now()/1000)+3600})).toString('base64url')+'.signature';
+const token=Buffer.from('{}').toString('base64url')+'.'+Buffer.from(JSON.stringify({session_id:'00000000-0000-4000-8000-000000000001',sub:'owner',role:'authenticated',exp:Math.floor(Date.now()/1000)+3600})).toString('base64url')+'.signature';
 global.fetch=async(url,init={})=>{
  const headers=new Headers(init.headers);const body=init.body?JSON.parse(init.body):null;
  calls.push({url:String(url),authorization:headers.get('authorization'),body});
+ if(String(url).includes('/rest/v1/auth_sessions') && (!init.method || init.method === 'GET')) return new Response(JSON.stringify({expires_at:new Date(Date.now()+86400000).toISOString(),revoked_at:null}),{status:200,headers:{'Content-Type':'application/json'}});
  if(String(url).includes('/auth/v1/token')) return new Response(JSON.stringify({access_token:token,refresh_token:'refresh',token_type:'bearer',expires_in:3600,user:{id:'owner',email:'owner@example.com',aud:'authenticated'}}),{status:200,headers:{'Content-Type':'application/json'}});
  if(String(url).includes('/auth/v1/admin/users')) return new Response(JSON.stringify({id:'owner',email:'owner@example.com'}),{status:200,headers:{'Content-Type':'application/json'}});
  if(String(url).includes('/rest/v1/rpc/')) {
@@ -20,7 +21,7 @@ global.fetch=async(url,init={})=>{
 };
 const {supabaseAdmin,createAuthClient}=require('../dist/config/supabaseClient.js');
 const {login,register}=require('../dist/modules/auth/auth.controller.js');
-const run=(handler,body)=>new Promise((resolve,reject)=>handler({body},{status(){return this},json:resolve},reject));
+const run=(handler,body)=>new Promise((resolve,reject)=>handler({body},{status(){return this},setHeader(){},cookie(){},json:resolve},reject));
 test('login and registration do not replace the backend service role',async()=>{
  await run(login,{email:'owner@example.com',password:'Password123!'});
  assert.equal((await supabaseAdmin.auth.getSession()).data.session,null);

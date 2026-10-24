@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.productsService = exports.requireProduct = exports.productSelect = void 0;
+const categories_service_1 = require("../categories/categories.service");
 const supabaseClient_1 = require("../../config/supabaseClient");
 const apiError_1 = require("../../utils/apiError");
 const cloudinaryAsset_1 = require("../../utils/cloudinaryAsset");
@@ -21,8 +22,13 @@ exports.productsService = {
         return data || [];
     },
     async create(businessId, input) {
+        await (0, categories_service_1.validateCategory)(businessId, 'product', input.categoryId);
         const { data, error } = await supabaseClient_1.supabaseAdmin.from('products').insert({
             business_id: businessId,
+            ...(input.images !== undefined ? { images: input.images } : {}),
+            ...(input.specifications !== undefined ? { specifications: input.specifications } : {}),
+            folder_category_id: input.categoryId ?? null,
+            is_published: input.isPublished ?? true,
             name: input.name.en || input.name.mr,
             name_en: input.name.en,
             name_mr: input.name.mr,
@@ -44,7 +50,17 @@ exports.productsService = {
         return data;
     },
     async update(id, input) {
+        const current = await (0, exports.requireProduct)(id);
+        await (0, categories_service_1.validateCategory)(current.business_id, 'product', input.categoryId);
         const update = { updated_at: new Date().toISOString() };
+        if (input.images !== undefined)
+            update.images = input.images;
+        if (input.specifications !== undefined)
+            update.specifications = input.specifications;
+        if (input.categoryId !== undefined)
+            update.folder_category_id = input.categoryId;
+        if (input.isPublished !== undefined)
+            update.is_published = input.isPublished;
         if (input.name !== undefined) {
             update.name = input.name.en || input.name.mr;
             update.name_en = input.name.en;

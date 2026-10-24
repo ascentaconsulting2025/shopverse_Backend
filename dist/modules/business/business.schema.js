@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.businessPayloadSchema = exports.createBusinessSchema = exports.sectionVisibilitySchema = void 0;
+exports.businessPayloadSchema = exports.createBusinessSchema = exports.deleteBusinessSchema = exports.sectionVisibilitySchema = void 0;
 const zod_1 = require("zod");
 const theme_schema_1 = require("./theme.schema");
 exports.sectionVisibilitySchema = zod_1.z.object({
@@ -9,6 +9,9 @@ exports.sectionVisibilitySchema = zod_1.z.object({
     special_offers: zod_1.z.boolean(),
     photo_gallery: zod_1.z.boolean(),
     upcoming_events: zod_1.z.boolean(),
+}).strict();
+exports.deleteBusinessSchema = zod_1.z.object({
+    password: zod_1.z.string().min(1, 'Password is required'),
 }).strict();
 exports.createBusinessSchema = zod_1.z.object({
     business_name: zod_1.z.string().min(1),

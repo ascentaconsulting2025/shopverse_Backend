@@ -9,7 +9,7 @@ import { createAuthClient, supabaseAdmin } from '../../config/supabaseClient';
 import { toBusinessWrite, toBusinessPerson, toCard } from './business.mapper';
 import { slugify, uniqueSuffix } from '../../utils/generateSlug';
 import { deleteBusinessSchema, sectionVisibilitySchema } from './business.schema';
-import { deleteCloudinaryImage } from '../../utils/cloudinaryAsset';
+import { cloudinaryPublicIdFromUrl, deleteCloudinaryImage, deleteUnreferencedCloudinaryImage } from '../../utils/cloudinaryAsset';
 
 const toVisibility = (row: any) => ({
   products: row?.products ?? true,
@@ -136,7 +136,7 @@ async function savePeople(businessId: string, people: any[] | undefined) {
       description_en: person.description?.en || null,
       description_mr: person.description?.mr || null,
       profile_image_url: person.profileImage || null,
-      profile_image_public_id: person.profileImagePublicId || null,
+      profile_image_public_id: person.profileImagePublicId || cloudinaryPublicIdFromUrl(person.profileImage) || null,
       display_order: person.displayOrder ?? 0,
       is_primary: person.isPrimary === true,
       is_active: person.isActive !== false,
@@ -302,9 +302,6 @@ export const updateBusiness = asyncHandler(async (req, res) => {
   for (const key of ['products','services','offers','events','gallery','package']) delete merged[key];
   merged.stats = current.details?.stats || {};
   const nextLogoPublicId = toBusinessWrite(merged).logo_public_id;
-  if (current.logo_public_id && current.logo_public_id !== nextLogoPublicId) {
-    await deleteCloudinaryImage(current.logo_public_id, current.id);
-  }
   const { data, error } = await saveBusiness(current.id, merged, trusted);
   if (error) {
     if (error.code === '23505' && /slug/i.test(error.message || '')) {
@@ -312,6 +309,9 @@ export const updateBusiness = asyncHandler(async (req, res) => {
     }
     if (/requires (?:Premium|Standard or Premium)/.test(error.message || '')) throw new ApiError(error.message, 403);
     throw new ApiError('Unable to update business information', 400);
+  }
+  if (current.logo_public_id && current.logo_public_id !== nextLogoPublicId) {
+    void deleteUnreferencedCloudinaryImage(current.logo_public_id, current.id).catch(error => console.error('Logo replacement cleanup failed', error));
   }
   await savePeople(current.id, req.body.people);
   const content = await loadContent(current.id, true);
