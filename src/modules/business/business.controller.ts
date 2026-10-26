@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { env } from '../../config/env';
 import { getBusinessPackage, protectBusinessFields, requirePackageFeature } from '../packages/packages.service';
-import { loadCategories, loadPublicCategories, publicItems, hydrateCategoryNames, validateCategory } from '../categories/categories.service';
+import { loadCategories, loadGlobalCategories, loadPublicCategories, publicItems, hydrateCategoryNames, validateCategory } from '../categories/categories.service';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { ApiError } from '../../utils/apiError';
 import { apiSuccess } from '../../utils/apiResponse';
@@ -227,43 +227,80 @@ export const getBusinessCount = asyncHandler(async (_req, res) => {
 export const listMarketplace = asyncHandler(async (req, res) => {
   const search = String(req.query.search || '').trim().toLowerCase();
   const kind = String(req.query.kind || 'all');
-  const { data, error } = await supabaseAdmin
-    .from('businesses')
-    .select('*')
-    .eq('is_published', true)
-    .order('updated_at', { ascending: false });
-  if (error) throw new ApiError(error.message, 400);
-
-  const businesses = await Promise.all((data || []).map(async (row) => {
-    const [products, services, content, people] = await Promise.all([
-      loadProducts(row.id),
-      loadServices(row.id),
-      loadContent(row.id),
-      loadPeople(row.id),
-    ]);
-    const card = toCard((await hydrateCategoryNames([row]))[0]);
+  const kinds = new Set(kind.split(','));
+  const wants = (type: string) => kinds.has('all') || kinds.has(type);
+  // Bulk reads replace per-business queries; page explicitly past PostgREST's row cap.
+  const readPages = async (makeQuery: () => any) => {
+    const rows: any[] = [];
+    for (let offset = 0; ; offset += 1000) {
+      const { data, error } = await makeQuery().range(offset, offset + 999);
+      if (error) throw new ApiError(error.message, 400);
+      rows.push(...(data || []));
+      if ((data || []).length < 1000) return rows;
+    }
+  };
+  const [data, categories] = await Promise.all([
+    readPages(() => supabaseAdmin.from('businesses')
+      .select('id,slug,business_name,business_name_mr,category,category_mr,owner_name_mr,logo_url,address,global_category_id,feed_name:details->businessName,feed_owner:details->ownerName,feed_category:details->category,feed_logo:details->logo,feed_address:details->address')
+      .eq('is_published', true).order('updated_at', { ascending: false }).order('id')),
+    loadGlobalCategories(),
+  ]);
+  const ids = data.map(row => row.id);
+  const readChildren = async (type: string, table: string, columns: string, configure: (q: any) => any) => {
+    if (!wants(type)) return [];
+    const rows: any[] = [];
+    // Keep IN filters below URL limits without fetching each business separately.
+    for (let start = 0; start < ids.length; start += 100) {
+      rows.push(...await readPages(() => configure(supabaseAdmin.from(table).select(columns)
+        .in('business_id', ids.slice(start, start + 100))).order('id')));
+    }
+    return rows;
+  };
+  const [products, services, events, people] = await Promise.all([
+    readChildren('product', 'products', 'id,business_id,folder_category_id,is_published,name,name_en,name_mr,description,description_en,description_mr,price,image_url,category,category_en,category_mr',
+      q => q.or('is_available.is.null,is_available.eq.true').or('is_published.is.null,is_published.eq.true').order('sort_order').order('created_at', { ascending: false })),
+    readChildren('service', 'services', 'id,business_id,folder_category_id,is_published,name,name_en,name_mr,details,details_en,details_mr,starting_price,cover_image,category_en,category_mr',
+      q => q.or('is_published.is.null,is_published.eq.true').order('created_at', { ascending: false })),
+    readChildren('event', 'events', 'id,business_id,event_name_en,event_name_mr,description_en,description_mr,event_date,start_time,venue_en,venue_mr,poster_url',
+      q => q.is('deleted_at', null).eq('is_active', true).order('created_at', { ascending: false })),
+    readChildren('owner', 'business_people', 'id,business_id,full_name_en,full_name_mr,designation_en,designation_mr,description_en,description_mr,profile_image_url',
+      q => q.eq('is_active', true).order('display_order').order('created_at')),
+  ]);
+  const visibleCategories = new Set(categories.filter(c => c.available).map(c => c.id));
+  const publicRows = (rows: any[]) => rows.filter(row => row.is_published !== false &&
+    (!row.folder_category_id || visibleCategories.has(row.folder_category_id)));
+  const group = (rows: any[], map: (row: any) => any) => {
+    const groups = new Map<string, any[]>();
+    for (const row of rows) {
+      const items = groups.get(row.business_id) || [];
+      items.push(map(row)); groups.set(row.business_id, items);
+    }
+    return groups;
+  };
+  const productGroups = group(await hydrateCategoryNames(publicRows(products), categories), toProduct);
+  const serviceGroups = group(await hydrateCategoryNames(publicRows(services), categories), toService);
+  const eventGroups = group(events, toEvent);
+  const peopleGroups = group(people, toBusinessPerson);
+  const rows = await hydrateCategoryNames(data.map(row => ({ ...row, details: {
+    businessName: row.feed_name, ownerName: row.feed_owner, category: row.feed_category,
+    logo: row.feed_logo, address: row.feed_address,
+  } })), categories);
+  const businesses = rows.map(row => {
+    const card = toCard(row);
     return {
-      id: row.id,
-      slug: row.slug,
-      businessName: card.businessName,
-      ownerName: card.ownerName,
-      category: card.category,
-      logo: card.logo,
-      profileImage: card.profileImage,
-      address: card.address,
-      isVerified: card.isVerified,
-      people,
-      products: (await publicItems(row.id, 'product', products.filter(item => item.is_available !== false))).map(toProduct),
-      services: (await publicItems(row.id, 'service', services || [])).map(toService),
-      events: content.events.filter((item: any) => item.is_active !== false).map(toEvent),
+      id: row.id, slug: row.slug, businessName: card.businessName, ownerName: card.ownerName,
+      category: card.category, logo: card.logo, address: card.address,
+      products: productGroups.get(row.id) || [], services: serviceGroups.get(row.id) || [],
+      events: eventGroups.get(row.id) || [], people: peopleGroups.get(row.id) || [],
     };
-  }));
+  });
 
-  const result = businesses.flatMap((business: any) => {
+  const result = businesses.flatMap((catalog: any) => {
+    const { products, services, events, people, ...business } = catalog;
     const businessText = [business.businessName?.en, business.businessName?.mr, business.category?.en, business.category?.mr, business.ownerName?.en, business.ownerName?.mr].join(' ').toLowerCase();
     const matches = (item: any) => !search || [item.title?.en, item.title?.mr, item.name?.en, item.name?.mr, item.fullName?.en, item.fullName?.mr, item.designation?.en, item.designation?.mr, item.description?.en, item.description?.mr, item.category?.en, item.category?.mr, item.venue?.en, item.venue?.mr, businessText].join(' ').toLowerCase().includes(search);
     const records: any[] = [];
-    if (kind === 'all' || kind === 'business') {
+    if (wants('business')) {
       if (!search || businessText.includes(search)) {
         records.push({
           type: 'business',
@@ -277,11 +314,11 @@ export const listMarketplace = asyncHandler(async (req, res) => {
         });
       }
     }
-    if (kind === 'all' || kind === 'product') business.products.filter(matches).forEach((item: any) => records.push({ type: 'product', item, business }));
-    if (kind === 'all' || kind === 'service') business.services.filter(matches).forEach((item: any) => records.push({ type: 'service', item, business }));
-    if (kind === 'all' || kind === 'event') business.events.filter(matches).forEach((item: any) => records.push({ type: 'event', item, business }));
-    if (kind === 'all' || kind === 'owner') {
-      business.people.filter(matches).forEach((person: any) => records.push({ type: 'owner', item: person, business }));
+    if (wants('product')) products.filter(matches).forEach((item: any) => records.push({ type: 'product', item, business }));
+    if (wants('service')) services.filter(matches).forEach((item: any) => records.push({ type: 'service', item, business }));
+    if (wants('event')) events.filter(matches).forEach((item: any) => records.push({ type: 'event', item, business }));
+    if (wants('owner')) {
+      people.filter(matches).forEach((person: any) => records.push({ type: 'owner', item: person, business }));
     }
     return records;
   });

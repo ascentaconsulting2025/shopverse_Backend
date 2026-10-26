@@ -94,9 +94,9 @@ export async function publicItems(businessId: string, _type: CategoryType, items
  return items.filter(item=>item.is_published!==false && (!item.folder_category_id || visible.has(item.folder_category_id)));
 }
 /** Resolve names from relations on every read; old free text is only a historical fallback. */
-export async function hydrateCategoryNames<T extends Record<string, any>>(rows: T[]): Promise<T[]> {
+export async function hydrateCategoryNames<T extends Record<string, any>>(rows: T[], loadedCategories?: Awaited<ReturnType<typeof loadGlobalCategories>>): Promise<T[]> {
  if(!rows.some(row=>row.folder_category_id || row.global_category_id)) return rows;
- const categories=await loadGlobalCategories();
+ const categories=loadedCategories ?? await loadGlobalCategories();
  const byId=new Map(categories.map(c=>[c.id,c]));
  return rows.map(row=>{
   const category=byId.get(row.folder_category_id || row.global_category_id);
