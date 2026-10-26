@@ -15,4 +15,4 @@ export const offerSchema = z.object({
   imagePublicId: z.string().trim().optional(),
   isActive: z.boolean().default(true),
 });
-export const gallerySchema = z.object({ url: z.string().trim().url(), imageUrl: z.string().trim().url().optional(), imagePublicId: z.string().trim().optional(), caption: z.union([z.string().trim(), bilingual]).default(''), category: z.union([z.string().trim(), bilingual]).default(''), sortOrder: z.coerce.number().int().min(0).default(0), isActive: z.boolean().default(true) });
+export const gallerySchema = z.object({ categoryId: z.string().uuid().nullable().optional(), url: z.string().trim().url(), imageUrl: z.string().trim().url().optional(), imagePublicId: z.string().trim().optional(), caption: z.union([z.string().trim(), bilingual]).default(''), category: z.union([z.string().trim(), bilingual]).default(''), sortOrder: z.coerce.number().int().min(0).default(0), isActive: z.boolean().default(true) });

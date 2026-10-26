@@ -16,7 +16,7 @@ const makeQuery = table => {
   };
   const query = {
     select() { return query; }, eq(key, value) { filters.push([key, value]); return query; },
-    is() { return query; }, order() { return query; },
+    is() { return query; }, order() { return query; }, range() { return query; },
     update(value) { update = value; return query; },
     single: async () => execute(true), maybeSingle: async () => execute(true),
     then(resolve, reject) { return Promise.resolve(execute(false)).then(resolve, reject); },

@@ -30,5 +30,5 @@ export async function issueSession(res: Response, session: any, user: any, fresh
   res.setHeader('Cache-Control', 'no-store');
   res.cookie(cookieName, session.refresh_token, { ...options(), expires: new Date(active.expires_at) });
   const admins = (process.env.ADMIN_EMAILS || '').split(',').map(v => v.trim().toLowerCase());
-  return { user, role: admins.includes(user.email?.toLowerCase()) ? 'admin' : 'user', session: { access_token: session.access_token, expires_at: session.expires_at } };
+  return { user: { id:user.id,email:user.email,created_at:user.created_at,user_metadata:{full_name:user.user_metadata?.full_name || ''} }, role: admins.includes(user.email?.toLowerCase()) ? 'admin' : 'user', session: { access_token: session.access_token, expires_at: session.expires_at } };
 }

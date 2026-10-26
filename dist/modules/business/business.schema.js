@@ -79,6 +79,7 @@ const slugSchema = zod_1.z.string()
     .max(48, 'Slug must be 48 characters or fewer.')
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Use only lowercase letters, numbers, and hyphens.');
 exports.businessPayloadSchema = zod_1.z.object({
+    categoryId: zod_1.z.string().uuid().nullable().optional(),
     themeConfig: theme_schema_1.themeConfigSchema.nullable().optional(),
     themeDraft: theme_schema_1.themeConfigSchema.nullable().optional(),
     slug: slugSchema.optional(),

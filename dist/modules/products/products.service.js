@@ -10,7 +10,7 @@ const requireProduct = async (id) => {
     const { data, error } = await supabaseClient_1.supabaseAdmin.from('products').select(exports.productSelect).eq('id', id).single();
     if (error || !data)
         throw new apiError_1.ApiError('Product not found', 404);
-    return data;
+    return (await (0, categories_service_1.hydrateCategoryNames)([data]))[0];
 };
 exports.requireProduct = requireProduct;
 exports.productsService = {
@@ -19,7 +19,7 @@ exports.productsService = {
             .eq('business_id', businessId).order('sort_order').order('created_at', { ascending: false });
         if (error)
             throw new apiError_1.ApiError(error.message, 400);
-        return data || [];
+        return (0, categories_service_1.hydrateCategoryNames)(data || []);
     },
     async create(businessId, input) {
         await (0, categories_service_1.validateCategory)(businessId, 'product', input.categoryId);
@@ -28,6 +28,7 @@ exports.productsService = {
             ...(input.images !== undefined ? { images: input.images } : {}),
             ...(input.specifications !== undefined ? { specifications: input.specifications } : {}),
             folder_category_id: input.categoryId ?? null,
+            category_id: input.categoryId ?? null,
             is_published: input.isPublished ?? true,
             name: input.name.en || input.name.mr,
             name_en: input.name.en,
@@ -39,26 +40,36 @@ exports.productsService = {
             original_price: input.originalPrice ?? null,
             image_url: input.image || null,
             image_public_id: input.imagePublicId || (0, cloudinaryAsset_1.cloudinaryPublicIdFromUrl)(input.image) || null,
-            category: input.category?.en || input.category?.mr || null,
-            category_en: input.category?.en || null,
-            category_mr: input.category?.mr || null,
+            category: input.categoryId ? null : input.category?.en || input.category?.mr || null,
+            category_en: input.categoryId ? null : input.category?.en || null,
+            category_mr: input.categoryId ? null : input.category?.mr || null,
             is_available: input.isAvailable,
             sort_order: input.sortOrder ?? 0,
         }).select(exports.productSelect).single();
-        if (error)
+        if (error) {
+            if (['23503', '23514', '40001', '40P01'].includes(error.code))
+                (0, categories_service_1.categoryError)(error);
             throw new apiError_1.ApiError(error.message, 400);
-        return data;
+        }
+        return (await (0, categories_service_1.hydrateCategoryNames)([data]))[0];
     },
     async update(id, input) {
         const current = await (0, exports.requireProduct)(id);
-        await (0, categories_service_1.validateCategory)(current.business_id, 'product', input.categoryId);
+        await (0, categories_service_1.validateCategory)(current.business_id, 'product', input.categoryId, current.folder_category_id);
         const update = { updated_at: new Date().toISOString() };
         if (input.images !== undefined)
             update.images = input.images;
         if (input.specifications !== undefined)
             update.specifications = input.specifications;
-        if (input.categoryId !== undefined)
+        if (input.categoryId !== undefined && input.categoryId !== current.folder_category_id) {
             update.folder_category_id = input.categoryId;
+            update.category_id = input.categoryId;
+        }
+        if (input.categoryId && input.categoryId !== current.folder_category_id) {
+            update.category = null;
+            update.category_en = null;
+            update.category_mr = null;
+        }
         if (input.isPublished !== undefined)
             update.is_published = input.isPublished;
         if (input.name !== undefined) {
@@ -79,7 +90,7 @@ exports.productsService = {
             update.image_url = input.image || null;
             update.image_public_id = input.imagePublicId || (0, cloudinaryAsset_1.cloudinaryPublicIdFromUrl)(input.image) || null;
         }
-        if (input.category !== undefined) {
+        if (input.category !== undefined && !(input.categoryId ?? current.folder_category_id)) {
             update.category = input.category?.en || input.category?.mr || null;
             update.category_en = input.category?.en || null;
             update.category_mr = input.category?.mr || null;
@@ -89,9 +100,11 @@ exports.productsService = {
         if (input.sortOrder !== undefined)
             update.sort_order = input.sortOrder;
         const { data, error } = await supabaseClient_1.supabaseAdmin.from('products').update(update).eq('id', id).select(exports.productSelect).single();
+        if (error && ['23503', '23514', '40001', '40P01'].includes(error.code))
+            (0, categories_service_1.categoryError)(error);
         if (error || !data)
             throw new apiError_1.ApiError(error?.message || 'Product not found', error ? 400 : 404);
-        return data;
+        return (await (0, categories_service_1.hydrateCategoryNames)([data]))[0];
     },
     async remove(id) {
         const { error } = await supabaseClient_1.supabaseAdmin.from('products').delete().eq('id', id);

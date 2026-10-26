@@ -5,7 +5,6 @@ import { ApiError } from '../../utils/apiError';
 import { apiSuccess } from '../../utils/apiResponse';
 import { supabaseAdmin } from '../../config/supabaseClient';
 import { productsService, requireProduct } from './products.service';
-import { cloudinaryPublicIdFromUrl, deleteCloudinaryImage, deleteUnreferencedCloudinaryImage } from '../../utils/cloudinaryAsset';
 
 const requireBusinessOwner = async (businessId: string, userId: string, isAdmin = false) => {
   const { data } = await supabaseAdmin.from('businesses').select('id, owner_id').eq('id', businessId).single();
@@ -44,22 +43,14 @@ export const updateProduct = asyncHandler(async (req, res) => {
   const existing = await requireProduct(req.params.id);
   await requireBusinessOwner(existing.business_id, (req as any).user.id, (req as any).isAdmin);
   if (req.body.isPublished === true && existing.is_published === false) await requirePackageFeature(existing.business_id, 'products');
-  await validateCategory(existing.business_id, 'product', req.body.categoryId);
+  await validateCategory(existing.business_id, 'product', req.body.categoryId, existing.folder_category_id);
   const saved = await productsService.update(req.params.id, req.body);
-  if (req.body.image !== undefined) {
-    const nextPublicId = req.body.imagePublicId || cloudinaryPublicIdFromUrl(req.body.image);
-    if (existing.image_public_id && existing.image_public_id !== nextPublicId) {
-      // Preserve the successful save even if non-critical cleanup is unavailable.
-      void deleteUnreferencedCloudinaryImage(existing.image_public_id, existing.id).catch(error => console.error('Replacement cleanup failed', error));
-    }
-  }
   res.json(apiSuccess(toProduct(saved)));
 });
 
 export const deleteProduct = asyncHandler(async (req, res) => {
   const existing = await requireProduct(req.params.id);
   await requireBusinessOwner(existing.business_id, (req as any).user.id, (req as any).isAdmin);
-  await deleteCloudinaryImage(existing.image_public_id, existing.id);
   await productsService.remove(req.params.id);
   res.status(204).send();
 });

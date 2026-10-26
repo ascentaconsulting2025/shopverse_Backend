@@ -1,4 +1,4 @@
-// Use only a disposable database with schema + migrations 002-014 already installed.
+// Use only a disposable database with schema + migrations 002-014 (or through 018) installed.
 // PACKAGE_TEST_DATABASE_URL=postgresql://... node --test tests/packages-database.test.cjs
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
@@ -112,8 +112,10 @@ test('package database permissions, quotas, verification and public reads', {ski
  });
  await t.test('folder, section, profile and folder-move republication cannot bypass Basic',()=>{
   const id=business('standard'); sql(product(id));
-  const category=sql(`insert into business_categories(business_id,type,name,is_published) values('${id}','product','Hidden',false) returning id`);
+  const global=sql("select exists(select 1 from information_schema.columns where table_name='business_categories' and column_name='parent_id')")==='t';
+  const category=sql(`insert into business_categories(business_id,type,name,${global?'status':'is_published'}) values('${id}','product','Hidden',${global?"'enabled'":'false'}) returning id`);
   sql(`update products set folder_category_id='${category}' where business_id='${id}'`);
+  if(global) sql(`update business_categories set status='disabled' where id='${category}'`);
   sql(`insert into business_section_visibility(business_id,products) values('${id}',false)`);
   sql(`update businesses set is_published=false,plan_id='basic' where id='${id}'`);
   fails(`update business_categories set is_published=true where id='${category}'`,/Standard or Premium/);
@@ -132,6 +134,8 @@ test('package database permissions, quotas, verification and public reads', {ski
   const standard=business('standard'), premium=business('premium'), basic=business('basic');
   sql(`alter table businesses disable trigger apply_package; update businesses set profile_views=10000,is_verified=false where id='${standard}'; update businesses set is_verified=false where id='${premium}'; update businesses set is_verified=true where id='${basic}'; alter table businesses enable trigger apply_package`);
   execFileSync('psql',[db,'-X','-q','-v','ON_ERROR_STOP=1','-f',require('node:path').join(__dirname,'../migrations/014_business_packages.sql')],{stdio:['ignore','pipe','pipe']});
+  // Preserve chronological migration ordering when exercising a newer installation.
+  if(sql("select exists(select 1 from information_schema.columns where table_name='business_categories' and column_name='parent_id')")==='t') execFileSync('psql',[db,'-X','-q','-v','ON_ERROR_STOP=1','-f',require('node:path').join(__dirname,'../migrations/018_global_category_architecture.sql')],{stdio:['ignore','pipe','pipe']});
   for(const id of [standard,premium,basic])assert.equal(sql(`select is_verified from businesses where id='${id}'`),'t');
  });
  await t.test('parent cascade deletes do not fail quota triggers',()=>{

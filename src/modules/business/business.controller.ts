@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { env } from '../../config/env';
 import { getBusinessPackage, protectBusinessFields, requirePackageFeature } from '../packages/packages.service';
-import { loadCategories, publicItems } from '../categories/categories.service';
+import { loadCategories, publicItems, hydrateCategoryNames, validateCategory } from '../categories/categories.service';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { ApiError } from '../../utils/apiError';
 import { apiSuccess } from '../../utils/apiResponse';
@@ -9,7 +9,7 @@ import { createAuthClient, supabaseAdmin } from '../../config/supabaseClient';
 import { toBusinessWrite, toBusinessPerson, toCard } from './business.mapper';
 import { slugify, uniqueSuffix } from '../../utils/generateSlug';
 import { deleteBusinessSchema, sectionVisibilitySchema } from './business.schema';
-import { cloudinaryPublicIdFromUrl, deleteCloudinaryImage, deleteUnreferencedCloudinaryImage } from '../../utils/cloudinaryAsset';
+import { cloudinaryPublicIdFromUrl } from '../../utils/cloudinaryAsset';
 
 const toVisibility = (row: any) => ({
   products: row?.products ?? true,
@@ -66,18 +66,18 @@ const toProduct = (row: any) => ({
 
 const toEvent = (row: any) => ({ id: row.id, title: { en: row.event_name_en, mr: row.event_name_mr }, eventName: { en: row.event_name_en, mr: row.event_name_mr }, description: { en: row.description_en, mr: row.description_mr }, date: row.event_date, time: row.start_time, venue: { en: row.venue_en, mr: row.venue_mr }, enquiryNo: row.enquiry_number, eventLink: row.website_url || '', photo: row.poster_url || '', image: row.poster_url || '', imagePublicId: row.poster_public_id || '', isActive: row.is_active });
 const toOffer = (row: any) => ({ id: row.id, title: { en: row.offer_title_en, mr: row.offer_title_mr }, description: { en: row.terms_en, mr: row.terms_mr }, discountBadge: { en: row.discount_badge_en, mr: row.discount_badge_mr }, discountPercentage: row.discount_percentage == null ? undefined : Number(row.discount_percentage), couponCode: row.coupon_code, validUntil: { en: row.validity_en, mr: row.validity_mr }, imageUrl: row.image_url || '', imagePublicId: row.image_public_id || '', isActive: row.is_active });
-const toGallery = (row: any) => ({ id: row.id, url: row.image_url, imageUrl: row.image_url, imagePublicId: row.image_public_id || '', caption: row.caption, category: row.category, sortOrder: row.sort_order, isActive: row.is_active });
+const toGallery = (row: any) => ({ id: row.id, url: row.image_url, imageUrl: row.image_url, imagePublicId: row.image_public_id || '', caption: row.caption, category: row.category, categoryId: row.global_category_id ?? null, sortOrder: row.sort_order, isActive: row.is_active });
 
 async function loadProducts(businessId: string) {
   const { data, error } = await supabaseAdmin.from('products').select('*').eq('business_id', businessId).order('sort_order').order('created_at', { ascending: false });
   if (error) throw new ApiError(error.message, 400);
-  return data || [];
+  return hydrateCategoryNames(data || []);
 }
 
 async function loadServices(businessId: string) {
   const { data, error } = await supabaseAdmin.from('services').select('*').eq('business_id', businessId).order('created_at', { ascending: false });
   if (error) return null;
-  return data || [];
+  return hydrateCategoryNames(data || []);
 }
 
 async function loadContent(businessId: string, includeInactive = false) {
@@ -93,7 +93,7 @@ async function loadContent(businessId: string, includeInactive = false) {
   ]);
   const failed = [events, offers, gallery].find(result => result.error);
   if (failed?.error) throw new ApiError(failed.error.message, 400);
-  return { events: events.data || [], offers: offers.data || [], gallery: gallery.data || [] };
+  return { events: events.data || [], offers: offers.data || [], gallery: await hydrateCategoryNames(gallery.data || []) };
 }
 
 async function loadPeople(businessId: string, includeInactive = false) {
@@ -104,7 +104,7 @@ async function loadPeople(businessId: string, includeInactive = false) {
   return (data || []).map(toBusinessPerson);
 }
 
-/** Replaces the visible leadership set without deleting history/assets. */
+/** Replaces the visible leadership set; omitted photos are released for cleanup. */
 async function savePeople(businessId: string, people: any[] | undefined) {
   if (people === undefined) return;
   const activePrimary = people.filter((person) => person.isActive !== false && person.isPrimary);
@@ -120,7 +120,7 @@ async function savePeople(businessId: string, people: any[] | undefined) {
   // Deactivate omitted records; this is recoverable and prevents stale people from rendering.
   const omittedIds = [...existingIds].filter((id) => !incomingIds.includes(id));
   if (omittedIds.length) {
-    const { error } = await supabaseAdmin.from('business_people').update({ is_active: false, is_primary: false, updated_at: new Date().toISOString() }).in('id', omittedIds);
+    const { error } = await supabaseAdmin.from('business_people').update({ is_active: false, is_primary: false, profile_image_url: null, profile_image_public_id: null, updated_at: new Date().toISOString() }).in('id', omittedIds);
     if (error) throw new ApiError(error.message, 400);
   }
   // Clear an existing primary first so the partial unique index is never violated.
@@ -173,6 +173,7 @@ async function saveBusiness(id: string, card: Record<string, any>, trusted: { pl
 
 export const createBusiness = asyncHandler(async (req, res) => {
   const user = (req as any).user;
+  await validateCategory('', 'business', req.body.categoryId);
   protectBusinessFields(req.body, null, !!(req as any).isAdmin);
   const name = typeof req.body.businessName === 'object'
     ? req.body.businessName.en || req.body.businessName.mr
@@ -185,7 +186,7 @@ export const createBusiness = asyncHandler(async (req, res) => {
     const result = await insertBusiness({ ...req.body, slug }, user.id);
     if (!result.error) {
       await savePeople(result.data.id, req.body.people);
-      res.status(201).json(apiSuccess({ ...toCard(result.data), people: await loadPeople(result.data.id, true) }));
+      res.status(201).json(apiSuccess({ ...toCard((await hydrateCategoryNames([result.data]))[0]), people: await loadPeople(result.data.id, true) }));
       return;
     }
     lastError = result.error;
@@ -199,12 +200,12 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
   const { data, error } = await supabaseAdmin.from('businesses').select('*').eq('slug', req.params.slug).eq('is_published', true).single();
   if (error || !data) throw new ApiError('Business not found', 404);
   const [products, services, content, visibility, people] = await Promise.all([loadProducts(data.id), loadServices(data.id), loadContent(data.id), loadVisibility(data.id), loadPeople(data.id)]);
-  const card = toCard(data);
+  const card = toCard((await hydrateCategoryNames([data]))[0]);
   delete card.themeDraft;
   res.json(apiSuccess({
     ...card,
     sectionVisibility: { products: visibility.products, services: visibility.services, offers: visibility.special_offers, gallery: visibility.photo_gallery, events: visibility.upcoming_events },
-    categories: (await loadCategories(data.id)).filter(c => c.is_published),
+    categories: (await loadCategories(data.id)).filter(c => c.available && (c.type === 'product' ? products : services || []).some((item: any) => item.folder_category_id === c.id)),
     products: (await publicItems(data.id, 'product', products)).map(toProduct),
     services: (await publicItems(data.id, 'service', services || [])).map(toService),
     events: content.events.map(toEvent), offers: content.offers.map(toOffer), gallery: content.gallery.map(toGallery),
@@ -239,7 +240,7 @@ export const listMarketplace = asyncHandler(async (req, res) => {
       loadContent(row.id),
       loadPeople(row.id),
     ]);
-    const card = toCard(row);
+    const card = toCard((await hydrateCategoryNames([row]))[0]);
     return {
       id: row.id,
       slug: row.slug,
@@ -292,6 +293,7 @@ export const updateBusiness = asyncHandler(async (req, res) => {
   const { data: current, error: findError } = await supabaseAdmin.from('businesses').select('*').eq('id', req.params.id).single();
   if (findError || !current) throw new ApiError('Business not found', 404);
   if (current.owner_id !== user.id && !(req as any).isAdmin) throw new ApiError('You do not own this business', 403);
+  await validateCategory(current.id, 'business', req.body.categoryId, current.global_category_id);
   const trusted = { plan: !!(req as any).isAdmin && req.body.planId !== undefined, verification: !!(req as any).isAdmin && req.body.isVerified !== undefined };
   protectBusinessFields(req.body, current, !!(req as any).isAdmin);
   const themeChanged = ['themeConfig', 'themeDraft', 'templateId', 'themeColor', 'accentColor', 'fontFamily'].some(key =>
@@ -301,7 +303,6 @@ export const updateBusiness = asyncHandler(async (req, res) => {
   const merged = { ...toCard(current), ...req.body, id: current.id, slug: req.body.slug ?? current.slug };
   for (const key of ['products','services','offers','events','gallery','package']) delete merged[key];
   merged.stats = current.details?.stats || {};
-  const nextLogoPublicId = toBusinessWrite(merged).logo_public_id;
   const { data, error } = await saveBusiness(current.id, merged, trusted);
   if (error) {
     if (error.code === '23505' && /slug/i.test(error.message || '')) {
@@ -310,12 +311,9 @@ export const updateBusiness = asyncHandler(async (req, res) => {
     if (/requires (?:Premium|Standard or Premium)/.test(error.message || '')) throw new ApiError(error.message, 403);
     throw new ApiError('Unable to update business information', 400);
   }
-  if (current.logo_public_id && current.logo_public_id !== nextLogoPublicId) {
-    void deleteUnreferencedCloudinaryImage(current.logo_public_id, current.id).catch(error => console.error('Logo replacement cleanup failed', error));
-  }
   await savePeople(current.id, req.body.people);
   const content = await loadContent(current.id, true);
-  res.json(apiSuccess({ ...toCard(data), events: content.events.map(toEvent), offers: content.offers.map(toOffer), gallery: content.gallery.map(toGallery), categories: await loadCategories(current.id), products: (await loadProducts(current.id)).map(toProduct), services: (await loadServices(current.id) || []).map(toService), people: await loadPeople(current.id, true) }));
+  res.json(apiSuccess({ ...toCard((await hydrateCategoryNames([data]))[0]), events: content.events.map(toEvent), offers: content.offers.map(toOffer), gallery: content.gallery.map(toGallery), categories: await loadCategories(current.id), products: (await loadProducts(current.id)).map(toProduct), services: (await loadServices(current.id) || []).map(toService), people: await loadPeople(current.id, true) }));
 });
 
 export const deleteBusiness = asyncHandler(async (req, res) => {
@@ -338,22 +336,6 @@ export const deleteBusiness = asyncHandler(async (req, res) => {
     throw new ApiError('Password is incorrect', 401);
   }
 
-  const [products, services, events, gallery] = await Promise.all([
-    supabaseAdmin.from('products').select('id, image_public_id').eq('business_id', current.id),
-    supabaseAdmin.from('services').select('id, cover_image_public_id').eq('business_id', current.id),
-    supabaseAdmin.from('events').select('id, poster_public_id').eq('business_id', current.id),
-    supabaseAdmin.from('gallery_photos').select('id, image_public_id').eq('business_id', current.id),
-  ]);
-  const childQueryError = [products, services, events, gallery].find((result) => result.error)?.error;
-  if (childQueryError) throw new ApiError(childQueryError.message, 400);
-  await Promise.all([
-    deleteCloudinaryImage(current.logo_public_id, current.id),
-    ...(products.data || []).map((row) => deleteCloudinaryImage(row.image_public_id, row.id)),
-    ...(services.data || []).map((row) => deleteCloudinaryImage(row.cover_image_public_id, row.id)),
-    ...(events.data || []).map((row) => deleteCloudinaryImage(row.poster_public_id, row.id)),
-    ...(gallery.data || []).map((row) => deleteCloudinaryImage(row.image_public_id, row.id)),
-  ]);
-
   const { error } = await supabaseAdmin.from('businesses').delete().eq('id', current.id);
   if (error) throw new ApiError(error.message, 400);
   res.json(apiSuccess(null));
@@ -366,7 +348,7 @@ export const listMyBusinesses = asyncHandler(async (req, res) => {
   if (error) throw new ApiError(error.message, 400);
   const cards = await Promise.all(data.map(async (row) => {
     const [products, services, visibility, people, content] = await Promise.all([loadProducts(row.id), loadServices(row.id), loadVisibility(row.id), loadPeople(row.id, true), loadContent(row.id, true)]);
-    const card = toCard(row);
+    const card = toCard((await hydrateCategoryNames([row]))[0]);
     return {
       ...card,
       events: content.events.map(toEvent), offers: content.offers.map(toOffer), gallery: content.gallery.map(toGallery),

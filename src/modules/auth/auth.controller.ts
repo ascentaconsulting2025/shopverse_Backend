@@ -1,3 +1,4 @@
+import { isAdminUser } from '../../middlewares/authGuard';
 import { Request, Response, NextFunction } from 'express';
 import { issueSession, readRefresh, clearRefresh, sessionId } from './session';
 import { supabaseAdmin, createAuthClient } from '../../config/supabaseClient';
@@ -8,6 +9,7 @@ import { adminCreateUserSchema, loginSchema, registerSchema } from './auth.schem
 
 export const register = asyncHandler(async (req, res) => {
   const input = registerSchema.parse(req.body);
+  if (isAdminUser({email:input.email})) throw new ApiError('This email is reserved for administrator provisioning',403);
   const { data, error } = await supabaseAdmin.auth.admin.createUser({
     email: input.email, password: input.password, email_confirm: true,
     user_metadata: { full_name: input.full_name || '' },
@@ -30,11 +32,13 @@ export const login = asyncHandler(async (req, res) => {
 export const createUser = asyncHandler(async (req, res) => {
   if (!(req as any).isAdmin) throw new ApiError('Administrator access required', 403);
   const input = adminCreateUserSchema.parse(req.body);
+  if (isAdminUser({email:input.email})) throw new ApiError('Provision Super Admin accounts through the identity provider',403);
   const { data, error } = await supabaseAdmin.auth.admin.createUser({
     email: input.email,
     password: input.password,
     email_confirm: true,
     user_metadata: { full_name: input.full_name },
+    app_metadata: { created_by: (req as any).user.id, creation_method: 'administrator' },
   });
   if (error || !data.user) throw new ApiError(error?.message || 'Could not create account', 400);
   const { error: profileError } = await supabaseAdmin.from('profiles').upsert({

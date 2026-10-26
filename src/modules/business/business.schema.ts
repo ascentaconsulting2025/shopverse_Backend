@@ -90,6 +90,7 @@ const slugSchema = z.string()
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Use only lowercase letters, numbers, and hyphens.');
 
 export const businessPayloadSchema = z.object({
+  categoryId: z.string().uuid().nullable().optional(),
   themeConfig: themeConfigSchema.nullable().optional(),
   themeDraft: themeConfigSchema.nullable().optional(),
   slug: slugSchema.optional(),

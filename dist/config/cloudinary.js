@@ -7,5 +7,6 @@ cloudinary_1.v2.config({
     api_key: env_1.env.CLOUDINARY_API_KEY,
     api_secret: env_1.env.CLOUDINARY_API_SECRET,
     secure: true,
+    timeout: 30000,
 });
 exports.default = cloudinary_1.v2;

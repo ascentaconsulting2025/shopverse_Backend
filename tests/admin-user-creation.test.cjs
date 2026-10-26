@@ -11,7 +11,7 @@ stub('../dist/config/supabaseClient.js',{
 });
 const {createUser}=require('../dist/modules/auth/auth.controller.js');
 const valid={full_name:'New Owner',email:'owner@example.com',password:'initial-test-password'};
-const run=(body=valid,isAdmin=true)=>new Promise((resolve,reject)=>createUser({body,isAdmin},{status(){return this},json:resolve},reject));
+const run=(body=valid,isAdmin=true)=>new Promise((resolve,reject)=>createUser({body,isAdmin,user:{id:'11111111-1111-4111-8111-111111111111'}},{status(){return this},json:resolve},reject));
 beforeEach(()=>{calls=[];profileError=null});
 test('admin credential creation is protected against non-admin requests',async()=>{
  await assert.rejects(run(valid,false),error=>error.status===403);assert.equal(calls.length,0);
@@ -32,4 +32,18 @@ test('profile failure cleans up the newly provisioned account',async()=>{
  profileError={message:'Profile write failed'};
  await assert.rejects(run(),error=>error.status===500);
  assert.deepEqual(calls.at(-1),['delete','created-user']);
+});
+test('creator metadata uses the authenticated administrator, ignoring body values',async()=>{
+ await run({...valid,created_by:'attacker'});
+ assert.equal(calls[0][1].app_metadata.created_by,'11111111-1111-4111-8111-111111111111');
+ assert.equal(calls[0][1].app_metadata.creation_method,'administrator');
+});
+test('reserved Super Admin emails cannot be provisioned through ordinary creation',async()=>{
+ const previous=process.env.ADMIN_EMAILS;process.env.ADMIN_EMAILS=valid.email;
+ try {await assert.rejects(run(),e=>e.status===403);assert.equal(calls.length,0)}finally{if(previous===undefined)delete process.env.ADMIN_EMAILS;else process.env.ADMIN_EMAILS=previous}
+});
+test('public registration cannot claim a reserved Super Admin identity',async()=>{
+ const previous=process.env.ADMIN_EMAILS;process.env.ADMIN_EMAILS=valid.email;
+ const {register}=require('../dist/modules/auth/auth.controller.js');
+ try {await assert.rejects(new Promise((resolve,reject)=>register({body:valid},{json:resolve},reject)),e=>e.status===403);assert.equal(calls.length,0)}finally{if(previous===undefined)delete process.env.ADMIN_EMAILS;else process.env.ADMIN_EMAILS=previous}
 });

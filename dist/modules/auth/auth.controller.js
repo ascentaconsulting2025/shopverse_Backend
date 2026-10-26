@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.logout = exports.refresh = exports.createUser = exports.login = exports.register = void 0;
+const authGuard_1 = require("../../middlewares/authGuard");
 const session_1 = require("./session");
 const supabaseClient_1 = require("../../config/supabaseClient");
 const apiError_1 = require("../../utils/apiError");
@@ -9,6 +10,8 @@ const apiResponse_1 = require("../../utils/apiResponse");
 const auth_schema_1 = require("./auth.schema");
 exports.register = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const input = auth_schema_1.registerSchema.parse(req.body);
+    if ((0, authGuard_1.isAdminUser)({ email: input.email }))
+        throw new apiError_1.ApiError('This email is reserved for administrator provisioning', 403);
     const { data, error } = await supabaseClient_1.supabaseAdmin.auth.admin.createUser({
         email: input.email, password: input.password, email_confirm: true,
         user_metadata: { full_name: input.full_name || '' },
@@ -34,11 +37,14 @@ exports.createUser = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     if (!req.isAdmin)
         throw new apiError_1.ApiError('Administrator access required', 403);
     const input = auth_schema_1.adminCreateUserSchema.parse(req.body);
+    if ((0, authGuard_1.isAdminUser)({ email: input.email }))
+        throw new apiError_1.ApiError('Provision Super Admin accounts through the identity provider', 403);
     const { data, error } = await supabaseClient_1.supabaseAdmin.auth.admin.createUser({
         email: input.email,
         password: input.password,
         email_confirm: true,
         user_metadata: { full_name: input.full_name },
+        app_metadata: { created_by: req.user.id, creation_method: 'administrator' },
     });
     if (error || !data.user)
         throw new apiError_1.ApiError(error?.message || 'Could not create account', 400);

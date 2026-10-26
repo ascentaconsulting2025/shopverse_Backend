@@ -11,7 +11,7 @@ function from(table){
   const found=rows.filter(row=>filters.every(([k,v])=>row[k]===v));
   return {data:mode&&table!=='businesses'?{id:'new',...value}:single?structuredClone(found[0]||null):structuredClone(found),error:null};
  };
- const q={select:()=>q,eq:(k,v)=>{filters.push([k,v]);return q},is:()=>q,order:()=>q,
+ const q={select:()=>q,eq:(k,v)=>{filters.push([k,v]);return q},is:()=>q,order:()=>q,range:()=>q,
  insert:v=>{value=v;mode='insert';return q},update:v=>{value=v;mode='update';return q},
  single:async()=>result(true),maybeSingle:async()=>result(true),then:(a,b)=>Promise.resolve(result(false)).then(a,b)};
  return q;

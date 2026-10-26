@@ -51,6 +51,7 @@ export function toCard(row: any): any {
     slug: row.slug,
     businessName,
     category,
+    categoryId: row.global_category_id ?? null,
     ownerName,
     designation,
     tagline,
@@ -92,15 +93,18 @@ export function toBusinessWrite(card: Record<string, any>, ownerId?: string, inc
   const name = typeof card.businessName === 'object' ? card.businessName.en || card.businessName.mr : card.businessName;
   const category = typeof card.category === 'object' ? card.category.en || card.category.mr : card.category;
   const details = { ...card };
+  if(card.categoryId) delete details.category;
+  delete details.categoryId;
   for (const key of ['products','services','events','offers','gallery','package','details','profile_views','profileViews','plan_id','is_verified','owner_id']) delete details[key];
   return {
     ...(ownerId ? { owner_id: ownerId } : {}),
     business_name: name || 'Untitled business', business_name_mr: nullableMarathi(card.businessName), slug: card.slug,
-    category_mr: nullableMarathi(card.category),
+    ...(card.categoryId !== undefined ? {global_category_id: card.categoryId} : {}),
+    category_mr: card.categoryId ? null : nullableMarathi(card.category),
     owner_name_mr: nullableMarathi(card.ownerName),
     designation_mr: nullableMarathi(card.designation),
     tagline_mr: nullableMarathi(card.tagline),
-    category: category || null, description: plainText(typeof card.about === 'object' ? card.about.en : card.about) || plainText(typeof card.about === 'object' ? card.about.mr : '' ) || null,
+    category: card.categoryId ? null : category || null, description: plainText(typeof card.about === 'object' ? card.about.en : card.about) || plainText(typeof card.about === 'object' ? card.about.mr : '' ) || null,
     description_mr: nullableMarathi(card.about),
     logo_url: card.logo || null,
     logo_public_id: card.logoPublicId || cloudinaryPublicIdFromUrl(card.logo) || null,

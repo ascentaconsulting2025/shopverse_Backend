@@ -1,3 +1,5 @@
+> Superseded for current deployments by [Global Category Architecture Desk](global-category-architecture.md) and migration 018. The content below describes the historical folder implementation and its migration tests.
+
 # Product and service category folders
 
 Apply `migrations/010_category_folders.sql` after migrations 001–009 and before deploying the updated API/frontend. The inspected Supabase schema already has `products.category_id` and `services.category_id` referencing the shared `listing_categories` table. The migration **preserves those columns, foreign keys and records**. Business folders use the separate `folder_category_id` column; the frontend/API property remains `categoryId`.
