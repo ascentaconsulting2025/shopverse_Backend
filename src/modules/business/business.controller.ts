@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { env } from '../../config/env';
 import { getBusinessPackage, protectBusinessFields, requirePackageFeature } from '../packages/packages.service';
-import { loadCategories, publicItems, hydrateCategoryNames, validateCategory } from '../categories/categories.service';
+import { loadCategories, loadPublicCategories, publicItems, hydrateCategoryNames, validateCategory } from '../categories/categories.service';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { ApiError } from '../../utils/apiError';
 import { apiSuccess } from '../../utils/apiResponse';
@@ -173,8 +173,8 @@ async function saveBusiness(id: string, card: Record<string, any>, trusted: { pl
 
 export const createBusiness = asyncHandler(async (req, res) => {
   const user = (req as any).user;
-  await validateCategory('', 'business', req.body.categoryId);
   protectBusinessFields(req.body, null, !!(req as any).isAdmin);
+  await validateCategory('', 'business', req.body.categoryId);
   const name = typeof req.body.businessName === 'object'
     ? req.body.businessName.en || req.body.businessName.mr
     : req.body.businessName;
@@ -202,12 +202,13 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
   const [products, services, content, visibility, people] = await Promise.all([loadProducts(data.id), loadServices(data.id), loadContent(data.id), loadVisibility(data.id), loadPeople(data.id)]);
   const card = toCard((await hydrateCategoryNames([data]))[0]);
   delete card.themeDraft;
+  const [visibleProducts,visibleServices]=await Promise.all([publicItems(data.id,'product',products),publicItems(data.id,'service',services||[])]);
   res.json(apiSuccess({
     ...card,
     sectionVisibility: { products: visibility.products, services: visibility.services, offers: visibility.special_offers, gallery: visibility.photo_gallery, events: visibility.upcoming_events },
-    categories: (await loadCategories(data.id)).filter(c => c.available && (c.type === 'product' ? products : services || []).some((item: any) => item.folder_category_id === c.id)),
-    products: (await publicItems(data.id, 'product', products)).map(toProduct),
-    services: (await publicItems(data.id, 'service', services || [])).map(toService),
+    categories: await loadPublicCategories(visibleProducts,visibleServices),
+    products: visibleProducts.map(toProduct),
+    services: visibleServices.map(toService),
     events: content.events.map(toEvent), offers: content.offers.map(toOffer), gallery: content.gallery.map(toGallery),
     people,
   }));

@@ -1,5 +1,7 @@
 # Global Category Architecture Desk
 
+> Migration 019 extends the global taxonomy with explicit Business/Product/Service classification and business-specific permissions. See [Business category mapping](business-catalog-mapping.md) for the current selection rules and deployment steps. The unrestricted selection behavior described below documents migration 018.
+
 ## Legacy analysis and replacement decision
 
 The user explicitly chose replacement of the existing business category system, rather than keeping independent owner-managed folders.

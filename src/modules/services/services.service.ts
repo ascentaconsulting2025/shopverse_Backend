@@ -51,7 +51,7 @@ export const servicesService = {
     const current = await requireService(id);
     await validateCategory(current.business_id, 'service', input.categoryId, current.folder_category_id);
     const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
-    if (input.categoryId !== undefined && input.categoryId !== current.folder_category_id) { update.folder_category_id = input.categoryId; update.category_id = input.categoryId; }
+    if (input.categoryId !== undefined) { update.folder_category_id = input.categoryId; update.category_id = input.categoryId; }
     if(input.categoryId && input.categoryId !== current.folder_category_id) { update.category_en=null; update.category_mr=null; }
     if (input.isPublished !== undefined) update.is_published = input.isPublished;
     if (input.name !== undefined) {

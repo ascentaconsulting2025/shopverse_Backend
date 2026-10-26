@@ -177,8 +177,8 @@ async function saveBusiness(id, card, trusted) {
 }
 exports.createBusiness = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const user = req.user;
-    await (0, categories_service_1.validateCategory)('', 'business', req.body.categoryId);
     (0, packages_service_1.protectBusinessFields)(req.body, null, !!req.isAdmin);
+    await (0, categories_service_1.validateCategory)('', 'business', req.body.categoryId);
     const name = typeof req.body.businessName === 'object'
         ? req.body.businessName.en || req.body.businessName.mr
         : req.body.businessName;
@@ -205,12 +205,13 @@ exports.getBusinessBySlug = (0, asyncHandler_1.asyncHandler)(async (req, res) =>
     const [products, services, content, visibility, people] = await Promise.all([loadProducts(data.id), loadServices(data.id), loadContent(data.id), loadVisibility(data.id), loadPeople(data.id)]);
     const card = (0, business_mapper_1.toCard)((await (0, categories_service_1.hydrateCategoryNames)([data]))[0]);
     delete card.themeDraft;
+    const [visibleProducts, visibleServices] = await Promise.all([(0, categories_service_1.publicItems)(data.id, 'product', products), (0, categories_service_1.publicItems)(data.id, 'service', services || [])]);
     res.json((0, apiResponse_1.apiSuccess)({
         ...card,
         sectionVisibility: { products: visibility.products, services: visibility.services, offers: visibility.special_offers, gallery: visibility.photo_gallery, events: visibility.upcoming_events },
-        categories: (await (0, categories_service_1.loadCategories)(data.id)).filter(c => c.available && (c.type === 'product' ? products : services || []).some((item) => item.folder_category_id === c.id)),
-        products: (await (0, categories_service_1.publicItems)(data.id, 'product', products)).map(toProduct),
-        services: (await (0, categories_service_1.publicItems)(data.id, 'service', services || [])).map(toService),
+        categories: await (0, categories_service_1.loadPublicCategories)(visibleProducts, visibleServices),
+        products: visibleProducts.map(toProduct),
+        services: visibleServices.map(toService),
         events: content.events.map(toEvent), offers: content.offers.map(toOffer), gallery: content.gallery.map(toGallery),
         people,
     }));

@@ -61,7 +61,7 @@ exports.productsService = {
             update.images = input.images;
         if (input.specifications !== undefined)
             update.specifications = input.specifications;
-        if (input.categoryId !== undefined && input.categoryId !== current.folder_category_id) {
+        if (input.categoryId !== undefined) {
             update.folder_category_id = input.categoryId;
             update.category_id = input.categoryId;
         }

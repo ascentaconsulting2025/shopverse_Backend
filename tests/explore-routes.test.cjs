@@ -131,3 +131,14 @@ test("Explore validates and composes paginated scoped queries", async () => {
     (e) => e.status === 404,
   );
 });
+
+test("Explore scopes parent-category filters by ancestry IDs for products and services", async()=>{
+ response={data:[],count:0,error:null};
+ const node='30000000-0000-4000-8000-000000000001';
+ for(const route of ['/products','/services']) {
+  await run(route,{category:'Food',node,page:'2'});
+  assert.deepEqual(calls.find(c=>c[0]==='contains'),['contains','category_path',JSON.stringify([{id:node}])]);
+  assert.ok(calls.some(c=>c[0]==='eq'&&c[1]==='category'&&c[2]==='Food'));
+  await assert.rejects(run(route,{node:'invalid'}));
+ }
+});

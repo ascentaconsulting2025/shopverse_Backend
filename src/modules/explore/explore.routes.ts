@@ -9,6 +9,7 @@ const querySchema = z
   .object({
     category: z.string().max(200).optional(),
     subcategory: z.string().max(200).optional(),
+    node: z.string().uuid().optional(),
     search: z.string().trim().max(100).optional(),
     seller: z.string().uuid().optional(),
     min: z.coerce.number().min(0).optional(),
@@ -55,6 +56,8 @@ for (const kind of ["products", "services"] as const) {
         .select("*", { count: "exact" });
       if (q.category) query = query.eq("category", q.category);
       if (q.subcategory) query = query.eq("subcategory", q.subcategory);
+      // The SDK encodes JS arrays as PostgreSQL arrays; category_path is JSONB.
+      if (q.node) query = query.contains("category_path", JSON.stringify([{id:q.node}]));
       if (q.search)
         query = query.ilike("name", `%${q.search.replace(/[\\%_]/g, "\\$&")}%`);
       if (kind === "products" && q.metal)

@@ -52,7 +52,7 @@ export const productsService = {
 		const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
 		if (input.images !== undefined) update.images = input.images;
     if (input.specifications !== undefined) update.specifications = input.specifications;
-    if (input.categoryId !== undefined && input.categoryId !== current.folder_category_id) { update.folder_category_id = input.categoryId; update.category_id = input.categoryId; }
+    if (input.categoryId !== undefined) { update.folder_category_id = input.categoryId; update.category_id = input.categoryId; }
     if(input.categoryId && input.categoryId !== current.folder_category_id) { update.category=null; update.category_en=null; update.category_mr=null; }
     if (input.isPublished !== undefined) update.is_published = input.isPublished;
     if (input.name !== undefined) { update.name = input.name.en || input.name.mr; update.name_en = input.name.en; update.name_mr = input.name.mr; }

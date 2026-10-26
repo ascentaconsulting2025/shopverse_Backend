@@ -69,3 +69,24 @@ test('legacy owner CRUD and reorder URLs cannot bypass global permissions',async
   await assert.rejects(invoke(route.stack.map(s=>s.handle),{isAdmin:true}),e=>e.status===410);
  }
 });
+
+test('mapping management and impact previews are restricted to Super Admin',async()=>{
+ for(const [method,path,body] of [['get','/:id/mappings',{}],['get','/:id/impact',{}],['post','/:id/mappings/preview',{type:'product',categoryIds:[]}],['put','/:id/mappings',{type:'product',categoryIds:[],version:1}]]) {
+  await assert.rejects(run(method,path,{params:{id},body}),e=>e.status===403);
+ }
+ assert.equal(calls.length,0);
+});
+test('mapping saves validate unique IDs, types and versions and use an atomic RPC',async()=>{
+ await run('put','/:id/mappings',{token:'admin',params:{id},body:{type:'product',categoryIds:[id],version:3}});
+ assert.equal(calls.at(-1).name,'replace_business_catalog_mappings');
+ assert.deepEqual(calls.at(-1).args,{p_business_category:id,p_type:'product',p_categories:[id],p_version:3});
+ for(const body of [{type:'product',categoryIds:[id,id],version:3},{type:'business',categoryIds:[],version:3},{type:'service',categoryIds:[]},{type:'product',categoryIds:['bad'],version:3}])
+  await assert.rejects(run('put','/:id/mappings',{token:'admin',params:{id},body}));
+ await run('post','/:id/mappings/preview',{token:'admin',params:{id},body:{type:'service',categoryIds:[]}});
+ assert.equal(calls.at(-1).name,'catalog_assignment_impact');
+});
+test('typed JSON import keeps product and service trees explicit',async()=>{
+ await run('post','/import',{token:'admin',body:{structure:{Gold:['Rings']},preview:true,kind:'product'}});
+ assert.equal(calls.at(-1).name,'import_catalog_categories');assert.equal(calls.at(-1).args.p_kind,'product');
+ await assert.rejects(run('post','/import',{token:'admin',body:{structure:{Gold:['Rings']},preview:false,kind:'business'}}));
+});
