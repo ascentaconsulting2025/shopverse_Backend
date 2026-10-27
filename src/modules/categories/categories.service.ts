@@ -8,7 +8,7 @@ export async function requireCategoryOwner(businessId: string, req: any) {
  if (data.owner_id !== req.user.id && !req.isAdmin) throw new ApiError('You do not own this business',403);
 }
 export function categoryError(error: any): never {
- if (error.code === '23503') throw new ApiError('Category is referenced by existing records or child categories and cannot be deleted, or the selected parent no longer exists.',409);
+ if (error.code === '23503') throw new ApiError('Category or a descendant is referenced by an existing business, product, service, or gallery record. Reassign those records before deleting. For category edits, check that the selected parent still exists.',409);
  if (error.code === '40001' || error.code === '40P01') throw new ApiError('Category changed. Reload and try again.',409);
  if(error.code === 'P0001' && /^(Products|Services) requires Standard or Premium$/.test(error.message || '')) throw new ApiError('Referenced products or services require Standard or Premium before this category can republish them',403);
  if(error.code === 'P0001' && ['Invalid move','Invalid items'].includes(error.message)) throw new ApiError('Invalid move or items do not belong to this business',400);

@@ -121,3 +121,17 @@ Public business responses resolve display categories from the already-published 
 The shared public category browser also renders API-approved items whose category metadata is absent, including when other category folders exist. Explicitly unavailable categories and unpublished items retain their visibility restrictions. No schema migration is required for this correction.
 
 Regression coverage: `tests/business-catalog.test.cjs` (public metadata and unchanged selection permissions), frontend `tests/public-category-browser.test.tsx` (missing metadata, mixed folders, publication checks), and `tests/public-category-browser.browser.cjs` (all 11 items and legacy folder navigation).
+
+### Deleting unused category branches
+
+Apply `migrations/021_delete_unused_category_branches.sql` after migration 020.
+Catalog mappings alone no longer block deletion. The category write RPC removes
+an unused category, its descendants, and their mappings in one transaction.
+Surviving mapped business categories receive new versions so stale mapping editors
+cannot recreate removed assignments. Existing business, product, service, and
+gallery references (including archived records) still block the entire deletion.
+No listing or business records are deleted. The confirmation dialog describes
+branch deletion before the administrator confirms it.
+
+Regression check, on a fresh disposable database only:
+`psql -v ON_ERROR_STOP=1 -d <test_database> -f tests/category-deletion-database.sql`.
