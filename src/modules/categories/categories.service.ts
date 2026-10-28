@@ -1,3 +1,4 @@
+import { categoryBusinesses } from './integrity';
 import { supabaseAdmin } from '../../config/supabaseClient';
 import { resolveCatalog, publicCategoryProjection } from './catalog';
 import { ApiError } from '../../utils/apiError';
@@ -109,4 +110,15 @@ export async function hydrateCategoryNames<T extends Record<string, any>>(rows: 
 /** Only metadata for already-public items and their ancestors is returned. */
 export async function loadPublicCategories(products: any[], services: any[]) {
  return publicCategoryProjection(await loadGlobalCategories(),products,services);
+}
+
+export async function loadCategoryArchitecture() {
+ const rows=await loadGlobalCategories();
+ const mappings:any[]=[];
+ for(let offset=0;;offset+=1000){
+  const {data,error}=await supabaseAdmin.from('business_catalog_mappings').select('business_category_id,catalog_category_id').order('business_category_id').order('catalog_category_id').range(offset,offset+999);
+  if(error)categoryError(error);
+  mappings.push(...(data||[]));if((data||[]).length<1000)break;
+ }
+ return categoryBusinesses(rows,mappings);
 }

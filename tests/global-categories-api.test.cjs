@@ -90,3 +90,16 @@ test('typed JSON import keeps product and service trees explicit',async()=>{
  assert.equal(calls.at(-1).name,'import_catalog_categories');assert.equal(calls.at(-1).args.p_kind,'product');
  await assert.rejects(run('post','/import',{token:'admin',body:{structure:{Gold:['Rings']},preview:false,kind:'business'}}));
 });
+
+test('architecture is admin-only and deletion refuses child branches before the RPC',async()=>{
+ await assert.rejects(run('get','/architecture'),e=>e.status===403);
+ rows.push({id:'child',name:'Child',catalog_kind:'product',parent_id:id,status:'enabled',is_published:true});
+ await assert.rejects(run('delete','/:id',{token:'admin',params:{id},body:{version:1}}),e=>e.status===409&&/child/.test(e.message));
+ assert.equal(calls.length,0);
+});
+test('normalized duplicates and invalid contextual parents never reach the write RPC',async()=>{
+ rows[0].catalog_kind='product';
+ await assert.rejects(run('post','/',{token:'admin',body:{name:' GLOBAL ',catalog_kind:'product'}}),e=>e.status===409&&/Already Exists/.test(e.message));
+ await assert.rejects(run('post','/',{token:'admin',body:{name:'New',catalog_kind:'product',map_business_category_id:id}}),e=>e.status===404);
+ assert.equal(calls.length,0);
+});

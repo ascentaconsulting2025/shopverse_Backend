@@ -4,7 +4,7 @@ export function parseCategoryImport(input: unknown): string[][] {
  const paths:string[][]=[];
  const seen=new Set<string>();
  const add=(name:string,parent:string[])=>{
-  const label=name.trim();
+  const label=name.normalize('NFKC').trim().replace(/\s+/gu,' ');
   if(!label) return null;
   if(label.length>100 || parent.length>=32) throw new ApiError('Category names must be 1–100 characters and hierarchy depth at most 32',400);
   const path=[...parent,label];
