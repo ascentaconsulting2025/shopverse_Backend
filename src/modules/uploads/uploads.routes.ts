@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { imageDimensions } from '../../utils/imageDimensions';
 import imageSpecs from '../../config/imageSpecs.json';
 import { Router } from 'express';
 import multer from 'multer';
@@ -35,6 +36,10 @@ router.post('/', authGuard, uploadsRateLimiter, upload.single('image'), async (r
     const imageType = req.body.imageType as keyof typeof imageSpecs;
     if (!Object.prototype.hasOwnProperty.call(imageSpecs, imageType)) return res.status(400).json({ success: false, error: { message: 'A valid imageType is required.' } });
     const spec = imageSpecs[imageType];
+    const dimensions = imageDimensions(req.file.buffer);
+    if (!dimensions || dimensions.width !== spec.width || dimensions.height !== spec.height) {
+      return res.status(422).json({ success: false, error: { message: `Image must be cropped to ${spec.width} × ${spec.height} pixels.` } });
+    }
     console.info('Image selected');
     console.info('Upload started');
     console.info('Cloudinary upload request sent');
@@ -49,7 +54,7 @@ router.post('/', authGuard, uploadsRateLimiter, upload.single('image'), async (r
     if (reserved.error) throw new Error('Unable to register uploaded image. Please try again.');
     const result = await new Promise<any>((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
-        { folder: 'shopverse/uploads', public_id: uploadId, overwrite: false, context: { owner_id: (req as any).user.id, image_type: imageType }, resource_type: 'image', allowed_formats: ['jpg', 'jpeg', 'png', 'webp'], transformation: [{ width: spec.width, height: spec.height, crop: imageType === 'logo' ? 'pad' : 'fill', background: 'white' }] },
+        { folder: 'shopverse/uploads', public_id: uploadId, overwrite: false, context: { owner_id: (req as any).user.id, image_type: imageType }, resource_type: 'image', allowed_formats: ['jpg', 'jpeg', 'png', 'webp'] },
         (error, uploadResult) => error ? reject(error) : resolve(uploadResult),
       );
       stream.end(req.file!.buffer);

@@ -289,7 +289,9 @@ export const listMarketplace = asyncHandler(async (req, res) => {
     const card = toCard(row);
     return {
       id: row.id, slug: row.slug, businessName: card.businessName, ownerName: card.ownerName,
-      category: card.category, logo: card.logo, address: card.address,
+      category: card.category, categoryId: card.categoryId,
+      categoryImage: categories.find(category => category.id === card.categoryId)?.image_url || '',
+      logo: card.logo, address: card.address,
       products: productGroups.get(row.id) || [], services: serviceGroups.get(row.id) || [],
       events: eventGroups.get(row.id) || [], people: peopleGroups.get(row.id) || [],
     };
