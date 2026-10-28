@@ -1,3 +1,4 @@
+import { categoryDeletionPreview } from './deletion-preview';
 import { normalizeName, validateWrite } from './integrity';
 import { Router } from 'express';
 import { z } from 'zod';
@@ -55,6 +56,11 @@ globalCategoryRoutes.post('/import',requireCategoryAdmin,asyncHandler(async(req,
 }));
 const mappingBody=z.object({type:z.enum(['product','service']),categoryIds:z.array(z.string().uuid()).max(1000).refine(ids=>new Set(ids).size===ids.length)}).strict();
 globalCategoryRoutes.get('/architecture',requireCategoryAdmin,asyncHandler(async(_req,res)=>{res.json(apiSuccess(await loadCategoryArchitecture()));}));
+globalCategoryRoutes.get('/:id/deletion-preview',requireCategoryAdmin,asyncHandler(async(req,res)=>{
+ const id=z.string().uuid().parse(req.params.id);
+ const {offset}=z.object({offset:z.coerce.number().int().min(0).max(1000000).default(0)}).parse(req.query);
+ res.json(apiSuccess(await categoryDeletionPreview(id,offset)));
+}));
 globalCategoryRoutes.get('/:id/impact',requireCategoryAdmin,asyncHandler(async(req,res)=>{
  const id=z.string().uuid().parse(req.params.id);
  const {data,error}=await supabaseAdmin.rpc('catalog_category_impact',{p_id:id});

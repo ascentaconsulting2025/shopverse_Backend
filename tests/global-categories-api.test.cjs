@@ -103,3 +103,7 @@ test('normalized duplicates and invalid contextual parents never reach the write
  await assert.rejects(run('post','/',{token:'admin',body:{name:'New',catalog_kind:'product',map_business_category_id:id}}),e=>e.status===404);
  assert.equal(calls.length,0);
 });
+
+test('category deletion previews are restricted to Super Admin',async()=>{
+ await assert.rejects(run('get','/:id/deletion-preview',{params:{id}}),error=>error.status===403);
+});
