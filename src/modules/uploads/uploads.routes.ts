@@ -13,6 +13,23 @@ const router = Router();
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const supportedMimeTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
+// Keep Cloudinary assets organized by the semantic type already supplied by
+// the frontend. Gallery images belong to a business; generic image types and
+// admin category artwork go into the catch-all folder.
+const cloudinaryFolderByImageType: Record<keyof typeof imageSpecs, string> = {
+  product: 'product',
+  service: 'service',
+  event: 'event',
+  offer: 'offer',
+  profile: 'owner',
+  logo: 'owner',
+  gallery: 'business',
+  square: 'other',
+  landscape: 'other',
+  banner: 'other',
+  category: 'other',
+};
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_FILE_SIZE },
@@ -36,6 +53,7 @@ router.post('/', authGuard, uploadsRateLimiter, upload.single('image'), async (r
     const imageType = req.body.imageType as keyof typeof imageSpecs;
     if (!Object.prototype.hasOwnProperty.call(imageSpecs, imageType)) return res.status(400).json({ success: false, error: { message: 'A valid imageType is required.' } });
     const spec = imageSpecs[imageType];
+    const folder = `shopverse/${cloudinaryFolderByImageType[imageType]}`;
     const dimensions = imageDimensions(req.file.buffer);
     if (!dimensions || dimensions.width !== spec.width || dimensions.height !== spec.height) {
       return res.status(422).json({ success: false, error: { message: `Image must be cropped to ${spec.width} × ${spec.height} pixels.` } });
@@ -47,14 +65,14 @@ router.post('/', authGuard, uploadsRateLimiter, upload.single('image'), async (r
     // Reserve a unique server-owned ID before contacting Cloudinary. If upload or
     // the following DB write times out, the durable ledger still covers the orphan.
     const uploadId = randomUUID();
-    const publicId = `shopverse/uploads/${uploadId}`;
+    const publicId = `${folder}/${uploadId}`;
     const reserved = await supabaseAdmin.from('cloudinary_assets').insert({
       public_id: publicId, secure_url: `pending:${uploadId}`, owner_id: (req as any).user.id,
     });
     if (reserved.error) throw new Error('Unable to register uploaded image. Please try again.');
     const result = await new Promise<any>((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
-        { folder: 'shopverse/uploads', public_id: uploadId, overwrite: false, context: { owner_id: (req as any).user.id, image_type: imageType }, resource_type: 'image', allowed_formats: ['jpg', 'jpeg', 'png', 'webp'] },
+        { folder, public_id: uploadId, overwrite: false, context: { owner_id: (req as any).user.id, image_type: imageType }, resource_type: 'image', allowed_formats: ['jpg', 'jpeg', 'png', 'webp'] },
         (error, uploadResult) => error ? reject(error) : resolve(uploadResult),
       );
       stream.end(req.file!.buffer);

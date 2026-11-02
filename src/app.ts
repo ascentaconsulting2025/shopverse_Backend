@@ -32,10 +32,21 @@ const configuredCorsOrigins = (process.env.CORS_ORIGIN || '')
   .map(normalizeOrigin)
   .filter((origin): origin is string => origin !== null);
 const allowedCorsOrigins = new Set([...defaultCorsOrigins, ...configuredCorsOrigins]);
+const isAllowedCorsOrigin = (origin: string) => {
+  if (allowedCorsOrigins.has(origin)) return true;
+  try {
+    const url = new URL(origin);
+    return url.protocol === 'https:' &&
+      (url.hostname === '1identity.in' || url.hostname.endsWith('.1identity.in')) &&
+      !url.port;
+  } catch {
+    return false;
+  }
+};
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedCorsOrigins.has(origin)) return callback(null, true);
+    if (!origin || isAllowedCorsOrigin(origin)) return callback(null, true);
     callback(new Error('Origin not allowed by CORS'));
   },
   credentials: true,
@@ -52,7 +63,7 @@ app.use('/api/v1/auth', (req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   const origin = req.headers.origin;
   if (req.method !== 'GET' && req.method !== 'OPTIONS' &&
-      (origin ? !allowedCorsOrigins.has(origin) : !!req.headers.cookie || req.headers['sec-fetch-site'] === 'cross-site')) {
+      (origin ? !isAllowedCorsOrigin(origin) : !!req.headers.cookie || req.headers['sec-fetch-site'] === 'cross-site')) {
     return res.status(403).json({ success: false, error: { message: 'Untrusted authentication origin' } });
   }
   next();
