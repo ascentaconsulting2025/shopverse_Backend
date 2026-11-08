@@ -14,6 +14,7 @@ router.get('/admin/users/:id', management.userDetails);
 router.post('/admin/users/:id', management.recoveryLimiter, management.mutateUser);
 
 router.post('/register', validateRequest(registerSchema), controller.register);
+router.post('/google', controller.googleLogin);
 router.post('/login', validateRequest(loginSchema), controller.login);
 router.post('/admin/users', authGuard, validateRequest(adminCreateUserSchema), controller.createUser);
 router.post('/refresh', controller.refresh);

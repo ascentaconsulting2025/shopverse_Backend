@@ -1,4 +1,7 @@
+import addressRoutes from '../modules/addresses/addresses.routes';
 import exploreRoutes from '../modules/explore/explore.routes';
+import cartRoutes from '../modules/cart/cart.routes';
+import ordersRoutes from '../modules/orders/orders.routes';
 import categoryRoutes, { globalCategoryRoutes } from '../modules/categories/categories.routes';
 import { Router } from 'express';
 import authRoutes from '../modules/auth/auth.routes';
@@ -11,6 +14,10 @@ import { eventSchema, offerSchema, gallerySchema } from '../modules/content/cont
 import uploadRoutes from '../modules/uploads/uploads.routes';
 
 const router = Router();
+
+router.use('/addresses', addressRoutes);
+router.use('/cart', cartRoutes);
+router.use('/orders', ordersRoutes);
 
 router.use('/explore', exploreRoutes);
 router.use('/categories', globalCategoryRoutes);

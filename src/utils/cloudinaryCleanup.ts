@@ -4,7 +4,12 @@ import { deleteCloudinaryImage } from './cloudinaryAsset';
 // Export the runner separately so failure/retry behavior can be tested without a server.
 export async function runCloudinaryCleanup(db = supabaseAdmin, destroy = deleteCloudinaryImage) {
   const { data, error } = await db.rpc('claim_cloudinary_cleanup');
-  if (error) throw new Error('Unable to claim Cloudinary cleanup jobs');
+  if (error) {
+    const detail = [error.code, error.message, error.details, error.hint]
+      .filter((part): part is string => typeof part === 'string' && part.length > 0)
+      .join(' | ');
+    throw new Error(`Unable to claim Cloudinary cleanup jobs${detail ? `: ${detail}` : ''}`);
+  }
   for (const asset of data || []) {
     try {
       await destroy(asset.public_id, asset.public_id);
@@ -27,7 +32,13 @@ export function startCloudinaryCleanup() {
     if (running) return;
     running = true;
     try { await runCloudinaryCleanup(); }
-    catch { console.error('Cloudinary cleanup worker unavailable; check migration 016 and database connectivity'); }
+    catch (error) {
+      // Supabase/PostgREST errors contain schema, permission, or connectivity clues;
+      // keep those while never logging request headers or environment values.
+      console.error('Cloudinary cleanup worker unavailable', {
+        error: error instanceof Error ? error.message : 'Unknown cleanup worker error',
+      });
+    }
     finally { running = false; }
   };
   void tick();

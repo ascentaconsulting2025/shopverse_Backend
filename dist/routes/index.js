@@ -37,6 +37,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const explore_routes_1 = __importDefault(require("../modules/explore/explore.routes"));
+const cart_routes_1 = __importDefault(require("../modules/cart/cart.routes"));
+const orders_routes_1 = __importDefault(require("../modules/orders/orders.routes"));
 const categories_routes_1 = __importStar(require("../modules/categories/categories.routes"));
 const express_1 = require("express");
 const auth_routes_1 = __importDefault(require("../modules/auth/auth.routes"));
@@ -48,6 +50,8 @@ const content_routes_1 = require("../modules/content/content.routes");
 const content_schema_1 = require("../modules/content/content.schema");
 const uploads_routes_1 = __importDefault(require("../modules/uploads/uploads.routes"));
 const router = (0, express_1.Router)();
+router.use('/cart', cart_routes_1.default);
+router.use('/orders', orders_routes_1.default);
 router.use('/explore', explore_routes_1.default);
 router.use('/categories', categories_routes_1.globalCategoryRoutes);
 router.use('/auth', auth_routes_1.default);

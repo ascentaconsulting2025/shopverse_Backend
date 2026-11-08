@@ -29,6 +29,16 @@ export const login = asyncHandler(async (req, res) => {
   res.json(apiSuccess(await issueSession(res, data.session, data.user, true)));
 });
 
+export const googleLogin = asyncHandler(async (req, res) => {
+  const { credential, nonce } = req.body || {};
+  if (typeof credential !== 'string' || credential.length > 10000 || typeof nonce !== 'string' || !/^[a-f0-9]{64}$/.test(nonce)) throw new ApiError('Invalid Google credential', 400);
+  const { data, error } = await createAuthClient().auth.signInWithIdToken({ provider: 'google', token: credential, nonce });
+  if (error || !data.session || !data.user) throw new ApiError(error?.message || 'Google sign in failed', 401);
+  const { error: profileError } = await supabaseAdmin.from('profiles').upsert({ id: data.user.id, full_name: data.user.user_metadata?.full_name || null }, { onConflict: 'id', ignoreDuplicates: true });
+  if (profileError) throw new ApiError('Could not create account profile', 500);
+  res.json(apiSuccess(await issueSession(res, data.session, data.user, true)));
+});
+
 export const createUser = asyncHandler(async (req, res) => {
   if (!(req as any).isAdmin) throw new ApiError('Administrator access required', 403);
   const input = adminCreateUserSchema.parse(req.body);

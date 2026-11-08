@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.logout = exports.refresh = exports.createUser = exports.login = exports.register = void 0;
+exports.logout = exports.refresh = exports.createUser = exports.googleLogin = exports.login = exports.register = void 0;
 const authGuard_1 = require("../../middlewares/authGuard");
 const session_1 = require("./session");
 const supabaseClient_1 = require("../../config/supabaseClient");
@@ -31,6 +31,18 @@ exports.login = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const { data, error } = await (0, supabaseClient_1.createAuthClient)().auth.signInWithPassword(input);
     if (error || !data.session)
         throw new apiError_1.ApiError(error?.message || 'Invalid email or password', 401);
+    res.json((0, apiResponse_1.apiSuccess)(await (0, session_1.issueSession)(res, data.session, data.user, true)));
+});
+exports.googleLogin = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    const { credential, nonce } = req.body || {};
+    if (typeof credential !== 'string' || credential.length > 10000 || typeof nonce !== 'string' || !/^[a-f0-9]{64}$/.test(nonce))
+        throw new apiError_1.ApiError('Invalid Google credential', 400);
+    const { data, error } = await (0, supabaseClient_1.createAuthClient)().auth.signInWithIdToken({ provider: 'google', token: credential, nonce });
+    if (error || !data.session || !data.user)
+        throw new apiError_1.ApiError(error?.message || 'Google sign in failed', 401);
+    const { error: profileError } = await supabaseClient_1.supabaseAdmin.from('profiles').upsert({ id: data.user.id, full_name: data.user.user_metadata?.full_name || null }, { onConflict: 'id', ignoreDuplicates: true });
+    if (profileError)
+        throw new apiError_1.ApiError('Could not create account profile', 500);
     res.json((0, apiResponse_1.apiSuccess)(await (0, session_1.issueSession)(res, data.session, data.user, true)));
 });
 exports.createUser = (0, asyncHandler_1.asyncHandler)(async (req, res) => {

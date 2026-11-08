@@ -19,7 +19,9 @@ const defaultCorsOrigins = [
     'http://localhost:3000',
     'http://localhost:3001',
     'http://localhost:3002',
+    'https://1identity.in',
     'https://www.1identity.in',
+    'https://karad.1identity.in',
 ];
 const normalizeOrigin = (value) => {
     try {
