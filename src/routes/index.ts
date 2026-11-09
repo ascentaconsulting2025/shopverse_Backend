@@ -1,3 +1,5 @@
+import logisticsRoutes from '../modules/logistics/logistics.routes';
+import deliveryPartnerRoutes from '../modules/delivery-partners/delivery-partners.routes';
 import addressRoutes from '../modules/addresses/addresses.routes';
 import exploreRoutes from '../modules/explore/explore.routes';
 import cartRoutes from '../modules/cart/cart.routes';
@@ -15,6 +17,8 @@ import uploadRoutes from '../modules/uploads/uploads.routes';
 
 const router = Router();
 
+router.use('/logistics', logisticsRoutes);
+router.use('/delivery-partners', deliveryPartnerRoutes);
 router.use('/addresses', addressRoutes);
 router.use('/cart', cartRoutes);
 router.use('/orders', ordersRoutes);

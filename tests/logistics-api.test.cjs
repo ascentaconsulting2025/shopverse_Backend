@@ -1,0 +1,11 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict'),path=require('node:path');
+const build=path.resolve(__dirname,'../dist'),config=path.join(build,'config/supabaseClient.js');let calls=[];
+require.cache[config]={id:config,filename:config,loaded:true,exports:{supabaseAdmin:{rpc:async(name,args)=>{calls.push({name,args});return{data:true,error:null}}}}};
+const router=require(path.join(build,'modules/logistics/logistics.routes.js')).default;
+function run(route,method,req){const r=router.stack.find(x=>x.route?.path===route&&x.route.methods[method]).route;return new Promise((resolve,reject)=>r.stack.at(-1).handle({user:{id:'authenticated-user'},params:{id:'cb000000-0000-4000-8000-000000000001'},body:{},query:{},...req},{json:resolve},reject));}
+test('admin mutations reject nonadmins before contacting the database',async()=>{for(const [route,method] of [['/settings','put'],['/admin/partners/:id/config','put'],['/tasks/:id/assign','post'],['/tasks/:id/cancel','post'],['/exceptions/:id/resolve','post']]){calls=[];await assert.rejects(run(route,method,{isAdmin:false}),e=>e.status===403);assert.equal(calls.length,0)}});
+test('manual assignment uses authenticated actor and rejects actor injection',async()=>{calls=[];const body={partner_id:'cc000000-0000-4000-8000-000000000001',reason:'Vehicle issue'};await assert.rejects(run('/tasks/:id/assign','post',{isAdmin:true,body:{...body,p_actor:'spoof'}}));assert.equal(calls.length,0);await run('/tasks/:id/assign','post',{isAdmin:true,body});assert.equal(calls[0].args.p_actor,'authenticated-user')});
+test('receipt and acceptance use authenticated user only',async()=>{for(const action of ['confirm','accept']){calls=[];await run(`/tasks/:id/${action}`,'post',{body:{p_user:'spoof'}});assert.equal(calls[0].args.p_user,'authenticated-user')}});
+test('partners cannot request completion as a transition',async()=>{calls=[];await assert.rejects(run('/tasks/:id/transition','post',{body:{action:'completed'}}));assert.equal(calls.length,0)});
+test('settings reject invalid weights and blank configuration',async()=>{calls=[];await assert.rejects(run('/settings','put',{isAdmin:true,body:{enabled:true}}));assert.equal(calls.length,0)});
