@@ -40,6 +40,14 @@ router.get('/store/:businessId', asyncHandler(async (req, res) => {
   if(error) throw new ApiError('Unable to load orders',503);
   res.json(apiSuccess(data));
 }));
+router.get('/mine', asyncHandler(async (req, res) => {
+  const customerId = (req as any).user.id;
+  const {data,error} = await supabaseAdmin.from('marketplace_orders')
+    .select(`id,order_number,created_at,marketplace_store_orders(${selection},marketplace_order_status_history(previous_status,new_status,created_at))`)
+    .eq('customer_id',customerId).order('created_at',{ascending:false}).limit(100);
+  if(error) throw new ApiError('Unable to load your orders',503);
+  res.json(apiSuccess(data || []));
+}));
 router.get('/confirmed', asyncHandler(async (req,res) => {
   if (!(req as any).isAdmin) throw new ApiError('Super admin access required',403);
   const {data,error} = await supabaseAdmin.from('marketplace_store_orders').select(selection).not('confirmed_at','is',null).order('confirmed_at',{ascending:false}).limit(100);

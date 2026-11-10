@@ -32,8 +32,12 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
+const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const controller = __importStar(require("./auth.controller"));
 const validateRequest_1 = require("../../middlewares/validateRequest");
 const auth_schema_1 = require("./auth.schema");
@@ -45,9 +49,11 @@ router.use('/admin/users', authGuard_1.authGuard, management.requireSuperAdmin);
 router.get('/admin/users', management.listUsers);
 router.get('/admin/users/:id', management.userDetails);
 router.post('/admin/users/:id', management.recoveryLimiter, management.mutateUser);
-router.post('/register', (0, validateRequest_1.validateRequest)(auth_schema_1.registerSchema), controller.register);
+const otpLimiter = (0, express_rate_limit_1.default)({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false });
+router.post('/verify-email', otpLimiter, controller.verifyEmail);
+router.post('/register', otpLimiter, (0, validateRequest_1.validateRequest)(auth_schema_1.registerSchema), controller.register);
 router.post('/google', controller.googleLogin);
-router.post('/login', (0, validateRequest_1.validateRequest)(auth_schema_1.loginSchema), controller.login);
+router.post('/login', otpLimiter, (0, validateRequest_1.validateRequest)(auth_schema_1.loginSchema), controller.login);
 router.post('/admin/users', authGuard_1.authGuard, (0, validateRequest_1.validateRequest)(auth_schema_1.adminCreateUserSchema), controller.createUser);
 router.post('/refresh', controller.refresh);
 router.post('/logout', controller.logout);
