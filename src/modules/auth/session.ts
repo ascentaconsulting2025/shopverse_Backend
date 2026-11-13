@@ -15,7 +15,10 @@ export const sessionId = (jwt: string): string => {
 };
 export async function assertSession(jwt: string, userId: string) {
   const { data, error } = await supabaseAdmin.from('auth_sessions').select('expires_at,revoked_at').eq('id', sessionId(jwt)).eq('user_id', userId).maybeSingle();
-  if (error) throw new ApiError('Session validation unavailable', 503);
+  if (error) {
+    console.error('Authentication session: registry lookup failed');
+    throw new ApiError('Session validation unavailable', 503);
+  }
   if (!data || data.revoked_at || Date.parse(data.expires_at) <= Date.now()) throw new ApiError('Session expired or revoked', 401);
   return data;
 }
@@ -24,7 +27,10 @@ export async function issueSession(res: Response, session: any, user: any, fresh
   if (!id) throw new ApiError('Authentication provider returned an invalid session', 502);
   if (fresh) {
     const { error } = await supabaseAdmin.from('auth_sessions').insert({ id, user_id: user.id, expires_at: new Date(Date.now() + sessionDays * 86400000).toISOString() });
-    if (error) throw new ApiError('Could not persist session', 503);
+    if (error) {
+      console.error('Authentication session: registry insert failed');
+      throw new ApiError('Could not persist session', 503);
+    }
   }
   const active = await assertSession(session.access_token, user.id);
   res.setHeader('Cache-Control', 'no-store');

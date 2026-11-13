@@ -30,7 +30,10 @@ export const login = asyncHandler(async (req, res) => {
     return;
   }
   const sent = await createAuthClient().auth.signInWithOtp({ email: input.email, options: { shouldCreateUser: false } });
-  if (sent.error) throw new ApiError('Could not send verification code. Please try again.', 503);
+  if (sent.error) {
+    console.error('Authentication login: verification code delivery failed');
+    throw new ApiError('Could not send verification code. Please try again.', 503);
+  }
   res.json(apiSuccess({ message: 'Check your email for a verification code.' }));
 });
 
