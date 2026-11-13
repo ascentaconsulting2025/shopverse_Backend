@@ -21,8 +21,14 @@ export const register = asyncHandler(async (req, res) => {
 
 export const login = asyncHandler(async (req, res) => {
   const input = loginSchema.parse(req.body);
-  const { data, error } = await createAuthClient().auth.signInWithPassword(input);
+  const { data, error } = await createAuthClient().auth.signInWithPassword({ email: input.email, password: input.password });
   if (error || !data.session) throw new ApiError('Invalid email or password', 401);
+  if (input.adminLogin && data.user && isAdminUser(data.user)) {
+    const { error: profileError } = await supabaseAdmin.from('profiles').upsert({ id: data.user.id, full_name: data.user.user_metadata?.full_name || null }, { onConflict: 'id', ignoreDuplicates: true });
+    if (profileError) throw new ApiError('Could not create account profile', 500);
+    res.json(apiSuccess(await issueSession(res, data.session, data.user, true)));
+    return;
+  }
   const sent = await createAuthClient().auth.signInWithOtp({ email: input.email, options: { shouldCreateUser: false } });
   if (sent.error) throw new ApiError('Could not send verification code. Please try again.', 503);
   res.json(apiSuccess({ message: 'Check your email for a verification code.' }));

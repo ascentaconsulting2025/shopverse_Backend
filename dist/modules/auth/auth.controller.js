@@ -24,9 +24,16 @@ exports.register = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
 });
 exports.login = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const input = auth_schema_1.loginSchema.parse(req.body);
-    const { data, error } = await (0, supabaseClient_1.createAuthClient)().auth.signInWithPassword(input);
+    const { data, error } = await (0, supabaseClient_1.createAuthClient)().auth.signInWithPassword({ email: input.email, password: input.password });
     if (error || !data.session)
         throw new apiError_1.ApiError('Invalid email or password', 401);
+    if (input.adminLogin && data.user && (0, authGuard_1.isAdminUser)(data.user)) {
+        const { error: profileError } = await supabaseClient_1.supabaseAdmin.from('profiles').upsert({ id: data.user.id, full_name: data.user.user_metadata?.full_name || null }, { onConflict: 'id', ignoreDuplicates: true });
+        if (profileError)
+            throw new apiError_1.ApiError('Could not create account profile', 500);
+        res.json((0, apiResponse_1.apiSuccess)(await (0, session_1.issueSession)(res, data.session, data.user, true)));
+        return;
+    }
     const sent = await (0, supabaseClient_1.createAuthClient)().auth.signInWithOtp({ email: input.email, options: { shouldCreateUser: false } });
     if (sent.error)
         throw new apiError_1.ApiError('Could not send verification code. Please try again.', 503);

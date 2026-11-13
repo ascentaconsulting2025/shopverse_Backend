@@ -10,6 +10,7 @@ exports.registerSchema = zod_1.z.object({
 exports.loginSchema = zod_1.z.object({
     email: zod_1.z.string().email(),
     password: zod_1.z.string().min(6),
+    adminLogin: zod_1.z.boolean().optional(),
 });
 exports.adminCreateUserSchema = zod_1.z.object({
     email: zod_1.z.string().email(),
