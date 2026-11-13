@@ -1,3 +1,4 @@
+import { businessDb, requireBusinessAccess } from '../business-access/access.service';
 import { requirePackageFeature } from '../packages/packages.service';
 import { publicItems, requireCategoryOwner, validateCategory } from '../categories/categories.service';
 import { asyncHandler } from '../../utils/asyncHandler';
@@ -5,12 +6,6 @@ import { ApiError } from '../../utils/apiError';
 import { apiSuccess } from '../../utils/apiResponse';
 import { supabaseAdmin } from '../../config/supabaseClient';
 import { productsService, requireProduct } from './products.service';
-
-const requireBusinessOwner = async (businessId: string, userId: string, isAdmin = false) => {
-  const { data } = await supabaseAdmin.from('businesses').select('id, owner_id').eq('id', businessId).single();
-  if (!data) throw new ApiError('Business not found', 404);
-  if (data.owner_id !== userId && !isAdmin) throw new ApiError('You do not own this business', 403);
-};
 
 const toProduct = (row: any) => ({
   images: row.images || [], specifications: row.specifications || {},
@@ -23,9 +18,9 @@ const toProduct = (row: any) => ({
 });
 
 export const createProduct = asyncHandler(async (req, res) => {
-  await requireBusinessOwner(req.params.businessId, (req as any).user.id, (req as any).isAdmin);
+  await requireBusinessAccess(req.params.businessId, req);
   await requirePackageFeature(req.params.businessId, 'products', true);
-  res.status(201).json(apiSuccess(toProduct(await productsService.create(req.params.businessId, req.body))));
+  res.status(201).json(apiSuccess(toProduct(await productsService.create(req.params.businessId, req.body, businessDb(req)))));
 });
 
 export const listProducts = asyncHandler(async (req, res) => {
@@ -41,21 +36,21 @@ export const getProduct = asyncHandler(async (req, res) => {
 
 export const updateProduct = asyncHandler(async (req, res) => {
   const existing = await requireProduct(req.params.id);
-  await requireBusinessOwner(existing.business_id, (req as any).user.id, (req as any).isAdmin);
+  await requireBusinessAccess(existing.business_id, req);
   if (req.body.isPublished === true && existing.is_published === false) await requirePackageFeature(existing.business_id, 'products');
   await validateCategory(existing.business_id, 'product', req.body.categoryId, existing.folder_category_id);
-  const saved = await productsService.update(req.params.id, req.body);
+  const saved = await productsService.update(req.params.id, req.body, businessDb(req));
   res.json(apiSuccess(toProduct(saved)));
 });
 
 export const deleteProduct = asyncHandler(async (req, res) => {
   const existing = await requireProduct(req.params.id);
-  await requireBusinessOwner(existing.business_id, (req as any).user.id, (req as any).isAdmin);
-  await productsService.remove(req.params.id);
+  await requireBusinessAccess(existing.business_id, req);
+  await productsService.remove(req.params.id, businessDb(req));
   res.status(204).send();
 });
 
 export const manageProducts = asyncHandler(async(req,res)=>{
  await requireCategoryOwner(req.params.businessId,req);
- res.json(apiSuccess((await productsService.list(req.params.businessId)).map(toProduct)));
+ res.json(apiSuccess((await productsService.list(req.params.businessId,businessDb(req))).map(toProduct)));
 });

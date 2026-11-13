@@ -1,12 +1,11 @@
+import { requireBusinessAccess } from '../business-access/access.service';
 import { categoryBusinesses } from './integrity';
 import { supabaseAdmin } from '../../config/supabaseClient';
 import { resolveCatalog, publicCategoryProjection } from './catalog';
 import { ApiError } from '../../utils/apiError';
 export type CategoryType = 'product' | 'service';
 export async function requireCategoryOwner(businessId: string, req: any) {
- const { data, error } = await supabaseAdmin.from('businesses').select('owner_id').eq('id', businessId).single();
- if (error || !data) throw new ApiError('Business not found',404);
- if (data.owner_id !== req.user.id && !req.isAdmin) throw new ApiError('You do not own this business',403);
+ await requireBusinessAccess(businessId,req);
 }
 export function categoryError(error: any): never {
  if (error.code === '23503') throw new ApiError('Category or a descendant is referenced by an existing business, product, service, or gallery record. Reassign those records before deleting. For category edits, check that the selected parent still exists.',409);
