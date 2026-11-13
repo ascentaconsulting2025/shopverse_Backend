@@ -16,7 +16,7 @@ test('only the configured admin@gmail.com account bypasses verification after pa
   process.env.ADMIN_EMAILS = 'admin@gmail.com,other@example.com';
   otpCalls = 0; issued = 0; passwordError = null;
   user = { id: 'admin', email: 'admin@gmail.com', user_metadata: {} };
-  assert.equal((await run(user.email)).data.role, 'admin');
+  assert.equal((await run(user.email, false)).data.role, 'admin');
   assert.equal(issued, 1); assert.equal(otpCalls, 0);
   user = { id: 'other', email: 'other@example.com' };
   assert.match((await run(user.email)).data.message, /verification code/);
