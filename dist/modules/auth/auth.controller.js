@@ -27,7 +27,7 @@ exports.login = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const { data, error } = await (0, supabaseClient_1.createAuthClient)().auth.signInWithPassword({ email: input.email, password: input.password });
     if (error || !data.session)
         throw new apiError_1.ApiError('Invalid email or password', 401);
-    if (input.adminLogin && data.user && (0, authGuard_1.isAdminUser)(data.user)) {
+    if (input.adminLogin && data.user?.email?.toLowerCase() === 'admin@gmail.com' && (0, authGuard_1.isAdminUser)(data.user)) {
         const { error: profileError } = await supabaseClient_1.supabaseAdmin.from('profiles').upsert({ id: data.user.id, full_name: data.user.user_metadata?.full_name || null }, { onConflict: 'id', ignoreDuplicates: true });
         if (profileError)
             throw new apiError_1.ApiError('Could not create account profile', 500);

@@ -10,6 +10,9 @@ const app = express();
 // Opt in only to deployment-owned proxy addresses, so forwarded client IPs are trusted narrowly.
 const trustedProxies = (process.env.TRUSTED_PROXY_CIDRS || '').split(',').map(value => value.trim()).filter(Boolean);
 if (trustedProxies.length) app.set('trust proxy', trustedProxies);
+// Render routes public requests through its load balancer. Trust only the
+// immediately connected proxy unless explicit trusted proxy ranges are set.
+else if (process.env.RENDER === 'true') app.set('trust proxy', 1);
 const defaultCorsOrigins = [
   'http://localhost:3000',
   'http://localhost:3001',
