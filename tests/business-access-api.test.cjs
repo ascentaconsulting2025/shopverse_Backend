@@ -15,7 +15,29 @@ test('invitation tokens have independent 256-bit randomness and only hashes pers
 });
 test('email delivery fails closed without configuration',()=>{
  delete process.env.BUSINESS_INVITATION_DELIVERY_URL;
+ delete process.env.BUSINESS_INVITATION_DELIVERY_SECRET;
+ delete process.env.RESEND_API_KEY;
+ delete process.env.RESEND_FROM_EMAIL;
+ delete process.env.PUBLIC_APP_URL;
  assert.throws(()=>actual.invitationDeliveryConfig(),/not configured/);
+});
+test('direct Resend invitation delivery uses the configured sender and idempotency key',async()=>{
+ process.env.RESEND_API_KEY='re_test_12345678901234567890';
+ process.env.RESEND_FROM_EMAIL='1Identity <notifications@example.test>';
+ process.env.PUBLIC_APP_URL='https://app.example.test';
+ const originalFetch=global.fetch;let request;
+ global.fetch=async(url,init)=>{request={url,init};return {ok:true}};
+ try {
+  assert.equal(actual.invitationDeliveryConfig().provider,'resend');
+  await actual.deliverInvitation('invitation-id','manager@example.test','a'.repeat(43));
+  assert.equal(request.url,'https://api.resend.com/emails');
+  assert.equal(request.init.headers['Idempotency-Key'],'invitation-id');
+  const body=JSON.parse(request.init.body);assert.equal(body.to[0],'manager@example.test');
+  assert.match(body.html,/business-invitation=/);assert.ok(!body.html.includes(process.env.RESEND_API_KEY));
+ } finally {
+  global.fetch=originalFetch;
+  delete process.env.RESEND_API_KEY;delete process.env.RESEND_FROM_EMAIL;delete process.env.PUBLIC_APP_URL;
+ }
 });
 test('API validates authentication, confirmation and administrative boundaries',async()=>{
  process.env.BUSINESS_ACCESS_ENABLED='true';
@@ -32,7 +54,7 @@ test('API validates authentication, confirmation and administrative boundaries',
  invitationDeliveryConfig:()=>({endpoint:'https://example.test',secret:'test',app:'https://example.test'}),
  deliverInvitation:async()=>{throw new Error('delivery unavailable')},businessDb:req=>({rpc:async(name,args)=>{
   calls.push({role:req.testRole,name,args});
-  if(req.testRole==='manager'&&name==='business_access_details')return {error:{code:'42501',message:'Access denied'}};
+  if(req.testRole==='manager'&&['business_access_details','business_change_access'].includes(name))return {error:{code:'42501',message:'Access denied'}};
   return {data:name==='business_access_details'?{owner:null,managers:[],invitations:[],history:[]}:true};
  }})};
  const express=require('express');const app=express();app.use(express.json());app.use(require(path.join(build,'modules/business-access/access.routes.js')).default);
@@ -45,11 +67,14 @@ test('API validates authentication, confirmation and administrative boundaries',
  assert.equal((await send('/business-access/users/search','owner',{email:'test@example.test'})).status,403);
  assert.equal((await send(`/businesses/${bid}/access`,'manager')).status,403);
  const input={action:'add_manager',targetUserId:'00000000-0000-4000-8000-000000000002',expectedOwnerId:null,previousOwner:'remove',pendingInvitations:'revoke',confirmed:true};
- assert.equal((await send(`/businesses/${bid}/access/change`,'owner',input)).status,403);
+ assert.equal((await send(`/businesses/${bid}/access/change`,'manager',input)).status,403);
+ assert.equal((await send(`/businesses/${bid}/access/change`,'owner',input)).status,200);
+ const transfer={...input,action:'transfer_owner',expectedOwnerId:'00000000-0000-4000-8000-000000000003'};
+ assert.equal((await send(`/businesses/${bid}/access/change`,'owner',transfer)).status,403);
  assert.equal((await send(`/businesses/${bid}/access/change`,'admin',{...input,confirmed:false})).status,400);
  assert.equal((await send(`/businesses/${bid}/access/change`,'admin',{...input,actor:'forged'})).status,400);
  assert.equal((await send(`/businesses/${bid}/access/change`,'admin',input)).status,200);
- const mutation=calls.find(c=>c.name==='business_change_access');assert.ok(mutation);assert.equal(mutation.args.p_target,input.targetUserId);assert.ok(!('actor' in mutation.args));
+ const mutations=calls.filter(c=>c.name==='business_change_access');assert.deepEqual(mutations.map(call=>call.role),['manager','owner','admin']);assert.equal(mutations.at(-1).args.p_target,input.targetUserId);assert.ok(!('actor' in mutations.at(-1).args));
  assert.equal((await send('/business-invitations/accept','owner',{token:'invalid'})).status,400);
  const failedDelivery=await send(`/businesses/${bid}/access/invitations`,'owner',{email:'invitee@example.test'});
  assert.equal(failedDelivery.status,502);

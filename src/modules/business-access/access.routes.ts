@@ -40,7 +40,9 @@ router.get('/businesses/:businessId/access',asyncHandler(async(req,res)=>{
 router.post('/businesses/:businessId/access/change',limiter,asyncHandler(async(req,res)=>{
  const input=z.object({action:z.enum(['assign_owner','transfer_owner','add_manager','remove_manager']),targetUserId:uuid,
  expectedOwnerId:uuid.nullable(),previousOwner:z.enum(['remove','manager']),pendingInvitations:z.enum(['revoke','keep']),confirmed:z.literal(true)}).strict().parse(req.body);
- if(['assign_owner','add_manager'].includes(input.action) && !(req as any).isAdmin) throw new ApiError('Administrator required',403);
+ // Ownership is a platform-admin operation. Owners may manage Managers, but
+ // neither Owners nor Managers may promote an account to primary Owner.
+ if(['assign_owner','transfer_owner'].includes(input.action) && !(req as any).isAdmin) throw new ApiError('Administrator required',403);
  await rpc(req,'business_change_access',{p_business:uuid.parse(req.params.businessId),p_action:input.action,p_target:input.targetUserId,
  p_expected_owner:input.expectedOwnerId,p_previous_owner:input.previousOwner,p_pending_invitations:input.pendingInvitations});
  res.json(apiSuccess({updated:true}));

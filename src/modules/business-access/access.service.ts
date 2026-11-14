@@ -36,16 +36,31 @@ export async function requireBusinessAccess(businessId: string, req: any, ownerO
 export const hashInvitation = (token: string) => createHash('sha256').update(token).digest('hex');
 export const newInvitationToken = () => randomBytes(32).toString('base64url');
 
-// A configured delivery adapter receives one transactional email; no provider is invented.
-// Fail closed when absent. The adapter must deduplicate using invitationId.
+type InvitationDeliveryConfig =
+  | { provider: 'resend'; apiKey: string; from: string; app: string }
+  | { provider: 'adapter'; endpoint: string; secret: string; app: string };
+
+// Resend can deliver directly. The adapter contract remains available for
+// deployments that centralize transactional email in a separate service.
 export function invitationDeliveryConfig() {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  const from = process.env.RESEND_FROM_EMAIL?.trim();
   const endpoint = process.env.BUSINESS_INVITATION_DELIVERY_URL;
   const secret = process.env.BUSINESS_INVITATION_DELIVERY_SECRET;
   const app = process.env.PUBLIC_APP_URL;
-  if (!endpoint || !secret || !app || !endpoint.startsWith('https://') || !/^https:\/\//.test(app)) {
+  if (!app || !/^https:\/\//.test(app)) {
     throw new ApiError('Business invitation email delivery is not configured',503);
   }
-  return { endpoint, secret, app };
+  if (apiKey || from) {
+    if (!apiKey || !from || apiKey.length < 20 || from.length > 320) {
+      throw new ApiError('Resend invitation email configuration is incomplete',503);
+    }
+    return { provider: 'resend', apiKey, from, app } satisfies InvitationDeliveryConfig;
+  }
+  if (endpoint && secret && endpoint.startsWith('https://')) {
+    return { provider: 'adapter', endpoint, secret, app } satisfies InvitationDeliveryConfig;
+  }
+  throw new ApiError('Business invitation email delivery is not configured',503);
 }
 export async function deliverInvitation(id: string, email: string, token: string) {
   const config = invitationDeliveryConfig();
@@ -53,9 +68,20 @@ export async function deliverInvitation(id: string, email: string, token: string
   url.searchParams.set('section','business');
   // Fragment keeps the token out of HTTP access logs and referrers.
   url.hash = `business-invitation=${token}`;
-  const result = await fetch(config.endpoint, {
-    method:'POST', headers:{'Content-Type':'application/json',Authorization:`Bearer ${config.secret}`,'Idempotency-Key':id},
-    body:JSON.stringify({invitationId:id,to:email,acceptUrl:url.toString()}),signal:AbortSignal.timeout(15000),redirect:'error',
-  });
+  const acceptUrl=url.toString();
+  const result = config.provider === 'resend'
+    ? await fetch('https://api.resend.com/emails', {
+      method:'POST',
+      headers:{'Content-Type':'application/json',Authorization:`Bearer ${config.apiKey}`,'Idempotency-Key':id},
+      body:JSON.stringify({
+        from:config.from,to:[email],subject:'You’re invited to manage a business on 1Identity',
+        html:`<h2>You’re invited to 1Identity</h2><p>You have been invited to manage a business profile.</p><p><a href="${acceptUrl}">Review and accept invitation</a></p><p>Sign in or create an account using this email address. This invitation expires and can only be accepted by the invited email.</p><p>If you did not expect this invitation, you can ignore this email.</p>`,
+        text:`You have been invited to manage a business profile on 1Identity. Review and accept the invitation: ${acceptUrl}\n\nSign in or create an account using this email address. If you did not expect this invitation, ignore this email.`,
+      }),signal:AbortSignal.timeout(15000),redirect:'error',
+    })
+    : await fetch(config.endpoint, {
+      method:'POST', headers:{'Content-Type':'application/json',Authorization:`Bearer ${config.secret}`,'Idempotency-Key':id},
+      body:JSON.stringify({invitationId:id,to:email,acceptUrl}),signal:AbortSignal.timeout(15000),redirect:'error',
+    });
   if (!result.ok) throw new ApiError('Invitation email delivery failed. Revoke this invitation and try again.',502);
 }

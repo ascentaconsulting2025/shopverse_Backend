@@ -177,7 +177,7 @@ begin
  select * into b from public.businesses where id=p_business for update;
  if not found or actor is null or not public.business_can_access_team(p_business) then raise exception 'Access denied' using errcode='42501'; end if;
  if p_action not in ('assign_owner','transfer_owner','add_manager','remove_manager') then raise exception 'Invalid action' using errcode='22023'; end if;
- if p_action in ('assign_owner','add_manager') and not public.business_is_admin() then raise exception 'Administrator required' using errcode='42501'; end if;
+ if p_action in ('assign_owner','transfer_owner') and not public.business_is_admin() then raise exception 'Administrator required' using errcode='42501'; end if;
  if p_action<>'remove_manager' and not exists(select 1 from auth.users u join public.profiles p on p.id=u.id where u.id=p_target and u.email_confirmed_at is not null and (u.banned_until is null or u.banned_until<=now())) then
  raise exception 'Select an active verified account' using errcode='22023'; end if;
  if p_action in ('assign_owner','transfer_owner') then

@@ -47,8 +47,11 @@ end $$;
 
 do $$ begin
  begin update businesses set owner_id='00000000-0000-4000-8000-000000000002' where slug='created'; raise exception 'Expected forbidden owner PATCH'; exception when insufficient_privilege then null; end;
- begin perform business_change_access('10000000-0000-4000-8000-000000000001','add_manager','00000000-0000-4000-8000-000000000002',null,'remove','revoke'); raise exception 'Expected owner cannot directly add Manager'; exception when insufficient_privilege then null; end;
+ begin perform business_change_access('10000000-0000-4000-8000-000000000001','transfer_owner','00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001','remove','revoke'); raise exception 'Expected owner cannot transfer ownership'; exception when insufficient_privilege then null; end;
 end $$;
+select business_change_access('10000000-0000-4000-8000-000000000001','add_manager','00000000-0000-4000-8000-000000000005',null,'remove','revoke');
+select test_assert((select role='manager' and status='active' from business_members where business_id='10000000-0000-4000-8000-000000000001' and user_id='00000000-0000-4000-8000-000000000005'),'owner directly assigns registered Manager');
+select business_change_access('10000000-0000-4000-8000-000000000001','remove_manager','00000000-0000-4000-8000-000000000005',null,'remove','revoke');
 select business_invite('10000000-0000-4000-8000-000000000001','Manager@Example.test',repeat('a',64),7);
 select test_assert(not exists(select 1 from business_members where user_id='00000000-0000-4000-8000-000000000002'),'invitation grants no access');
 do $$ begin
