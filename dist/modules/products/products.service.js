@@ -14,17 +14,18 @@ const requireProduct = async (id) => {
 };
 exports.requireProduct = requireProduct;
 exports.productsService = {
-    async list(businessId) {
-        const { data, error } = await supabaseClient_1.supabaseAdmin.from('products').select(exports.productSelect)
+    async list(businessId, db = supabaseClient_1.supabaseAdmin) {
+        const { data, error } = await db.from('products').select(exports.productSelect)
             .eq('business_id', businessId).order('sort_order').order('created_at', { ascending: false });
         if (error)
             throw new apiError_1.ApiError(error.message, 400);
         return (0, categories_service_1.hydrateCategoryNames)(data || []);
     },
-    async create(businessId, input) {
+    async create(businessId, input, db = supabaseClient_1.supabaseAdmin) {
         await (0, categories_service_1.validateCategory)(businessId, 'product', input.categoryId);
-        const { data, error } = await supabaseClient_1.supabaseAdmin.from('products').insert({
+        const { data, error } = await db.from('products').insert({
             business_id: businessId,
+            ...(input.fleetTypeId !== undefined ? { fleet_type_id: input.fleetTypeId } : {}),
             ...(input.images !== undefined ? { images: input.images } : {}),
             ...(input.specifications !== undefined ? { specifications: input.specifications } : {}),
             folder_category_id: input.categoryId ?? null,
@@ -47,18 +48,22 @@ exports.productsService = {
             sort_order: input.sortOrder ?? 0,
         }).select(exports.productSelect).single();
         if (error) {
+            if (error.message?.includes('Fleet type unavailable'))
+                throw new apiError_1.ApiError('Select an active fleet type.', 409);
             if (['23503', '23514', '40001', '40P01'].includes(error.code))
                 (0, categories_service_1.categoryError)(error);
             throw new apiError_1.ApiError(error.message, 400);
         }
         return (await (0, categories_service_1.hydrateCategoryNames)([data]))[0];
     },
-    async update(id, input) {
+    async update(id, input, db = supabaseClient_1.supabaseAdmin) {
         const current = await (0, exports.requireProduct)(id);
         await (0, categories_service_1.validateCategory)(current.business_id, 'product', input.categoryId, current.folder_category_id);
         const update = { updated_at: new Date().toISOString() };
         if (input.images !== undefined)
             update.images = input.images;
+        if (input.fleetTypeId !== undefined && input.fleetTypeId !== current.fleet_type_id)
+            update.fleet_type_id = input.fleetTypeId;
         if (input.specifications !== undefined)
             update.specifications = input.specifications;
         if (input.categoryId !== undefined) {
@@ -99,15 +104,17 @@ exports.productsService = {
             update.is_available = input.isAvailable;
         if (input.sortOrder !== undefined)
             update.sort_order = input.sortOrder;
-        const { data, error } = await supabaseClient_1.supabaseAdmin.from('products').update(update).eq('id', id).select(exports.productSelect).single();
+        const { data, error } = await db.from('products').update(update).eq('id', id).select(exports.productSelect).single();
+        if (error?.message?.includes('Fleet type unavailable'))
+            throw new apiError_1.ApiError('Select an active fleet type.', 409);
         if (error && ['23503', '23514', '40001', '40P01'].includes(error.code))
             (0, categories_service_1.categoryError)(error);
         if (error || !data)
             throw new apiError_1.ApiError(error?.message || 'Product not found', error ? 400 : 404);
         return (await (0, categories_service_1.hydrateCategoryNames)([data]))[0];
     },
-    async remove(id) {
-        const { error } = await supabaseClient_1.supabaseAdmin.from('products').delete().eq('id', id);
+    async remove(id, db = supabaseClient_1.supabaseAdmin) {
+        const { error } = await db.from('products').delete().eq('id', id);
         if (error)
             throw new apiError_1.ApiError(error.message, 400);
     },

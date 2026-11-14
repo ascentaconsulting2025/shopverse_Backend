@@ -23,7 +23,8 @@ export async function quoteDeliveryCart(userId:string,storeId:string,addressId:s
  if(!chosen)throw new ApiError('A fleet type is required.',409);
  const cfg=configSchema.safeParse(settings.data?.config);if(!cfg.success)throw new ApiError('Delivery pricing is not configured.',503);
  const origin=(store.data.details as any)?.address,lat=Number(origin?.latitude),lon=Number(origin?.longitude),destination=address.data;
- if(origin?.latitude==null||origin?.longitude==null||!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180||destination.latitude==null||destination.longitude==null)throw new ApiError('Store and delivery addresses need a saved map location.',409);
+ if(destination.latitude==null||destination.longitude==null||!Number.isFinite(Number(destination.latitude))||!Number.isFinite(Number(destination.longitude))||Math.abs(Number(destination.latitude))>90||Math.abs(Number(destination.longitude))>180)throw new ApiError('Edit your delivery address and save its current location to calculate delivery.',409);
+ if(origin?.latitude==null||origin?.longitude==null||!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180)throw new ApiError('This shop needs to save its location before delivery is available.',409);
  const plain=(v:any)=>typeof v==='string'?v.trim():typeof v?.en==='string'?v.en.trim():'';
  if(!plain(origin?.street)||!plain(origin?.city))throw new ApiError('Store pickup address is incomplete.',409);
  if(!cfg.data.postcodes.includes(destination.postal_code))throw new ApiError('Delivery is unavailable for this postcode.',409);
