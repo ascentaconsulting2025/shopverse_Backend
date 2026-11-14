@@ -12,15 +12,15 @@ export const requireProduct = async (id: string) => {
 };
 
 export const productsService = {
-	async list(businessId: string) {
-		const { data, error } = await supabaseAdmin.from('products').select(productSelect)
+	async list(businessId: string, db = supabaseAdmin) {
+		const { data, error } = await db.from('products').select(productSelect)
 			.eq('business_id', businessId).order('sort_order').order('created_at', { ascending: false });
 		if (error) throw new ApiError(error.message, 400);
 		return hydrateCategoryNames(data || []);
 	},
-	async create(businessId: string, input: any) {
+	async create(businessId: string, input: any, db = supabaseAdmin) {
     await validateCategory(businessId, 'product', input.categoryId);
-		const { data, error } = await supabaseAdmin.from('products').insert({
+		const { data, error } = await db.from('products').insert({
 			business_id: businessId,
       ...(input.images !== undefined ? {images: input.images} : {}),
       ...(input.specifications !== undefined ? {specifications: input.specifications} : {}),
@@ -46,7 +46,7 @@ export const productsService = {
 		if (error) { if (['23503','23514','40001','40P01'].includes(error.code)) categoryError(error); throw new ApiError(error.message,400); }
 		return (await hydrateCategoryNames([data]))[0];
 	},
-	async update(id: string, input: any) {
+	async update(id: string, input: any, db = supabaseAdmin) {
     const current = await requireProduct(id);
     await validateCategory(current.business_id, 'product', input.categoryId, current.folder_category_id);
 		const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -66,13 +66,13 @@ export const productsService = {
 		if (input.category !== undefined && !(input.categoryId ?? current.folder_category_id)) { update.category = input.category?.en || input.category?.mr || null; update.category_en = input.category?.en || null; update.category_mr = input.category?.mr || null; }
 		if (input.isAvailable !== undefined) update.is_available = input.isAvailable;
 		if (input.sortOrder !== undefined) update.sort_order = input.sortOrder;
-		const { data, error } = await supabaseAdmin.from('products').update(update).eq('id', id).select(productSelect).single();
+		const { data, error } = await db.from('products').update(update).eq('id', id).select(productSelect).single();
 		if (error && ['23503','23514','40001','40P01'].includes(error.code)) categoryError(error);
     if (error || !data) throw new ApiError(error?.message || 'Product not found', error ? 400 : 404);
 		return (await hydrateCategoryNames([data]))[0];
 	},
-	async remove(id: string) {
-		const { error } = await supabaseAdmin.from('products').delete().eq('id', id);
+	async remove(id: string, db = supabaseAdmin) {
+		const { error } = await db.from('products').delete().eq('id', id);
 		if (error) throw new ApiError(error.message, 400);
 	},
 };

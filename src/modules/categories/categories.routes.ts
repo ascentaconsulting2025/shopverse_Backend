@@ -1,3 +1,4 @@
+import { businessDb } from '../business-access/access.service';
 import { categoryDeletionPreview } from './deletion-preview';
 import { normalizeName, validateWrite } from './integrity';
 import { Router } from 'express';
@@ -137,7 +138,7 @@ router.post('/:businessId/categories/:type/assignment-preview',asyncHandler(asyn
 }));
 router.post('/:businessId/categories/:type/move',asyncHandler(async(req,res)=>{
  const body=z.object({ids:z.array(z.string().uuid()).min(1).max(500).refine(ids=>new Set(ids).size===ids.length),categoryId:z.string().uuid()}).strict().parse(req.body);
- const {error}=await supabaseAdmin.rpc('move_category_items',{p_business:req.params.businessId,p_type:req.params.type,p_ids:body.ids,p_category:body.categoryId});
+ const {error}=await businessDb(req).rpc('move_category_items',{p_business:req.params.businessId,p_type:req.params.type,p_ids:body.ids,p_category:body.categoryId});
  if(error) categoryError(error);
  res.json(apiSuccess(null));
 }));

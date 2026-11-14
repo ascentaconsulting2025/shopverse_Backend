@@ -11,6 +11,8 @@ global.fetch=async(url,init={})=>{
  calls.push({url:String(url),authorization:headers.get('authorization'),body});
  if(String(url).includes('/rest/v1/auth_sessions') && (!init.method || init.method === 'GET')) return new Response(JSON.stringify({expires_at:new Date(Date.now()+86400000).toISOString(),revoked_at:null}),{status:200,headers:{'Content-Type':'application/json'}});
  if(String(url).includes('/auth/v1/token')) return new Response(JSON.stringify({access_token:token,refresh_token:'refresh',token_type:'bearer',expires_in:3600,user:{id:'owner',email:'owner@example.com',aud:'authenticated'}}),{status:200,headers:{'Content-Type':'application/json'}});
+ if(String(url).includes('/auth/v1/otp')) return new Response('{}',{status:200,headers:{'Content-Type':'application/json'}});
+ if(String(url).includes('/auth/v1/signup')) return new Response(JSON.stringify({user:{id:'owner',email:'owner@example.com',aud:'authenticated'},session:null}),{status:200,headers:{'Content-Type':'application/json'}});
  if(String(url).includes('/auth/v1/admin/users')) return new Response(JSON.stringify({id:'owner',email:'owner@example.com'}),{status:200,headers:{'Content-Type':'application/json'}});
  if(String(url).includes('/rest/v1/rpc/')) {
   return headers.get('authorization')==='Bearer '+serviceKey

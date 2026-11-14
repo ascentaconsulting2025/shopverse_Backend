@@ -1,3 +1,4 @@
+import businessAccessRoutes from '../modules/business-access/access.routes';
 import logisticsRoutes from '../modules/logistics/logistics.routes';
 import deliveryPartnerRoutes from '../modules/delivery-partners/delivery-partners.routes';
 import addressRoutes from '../modules/addresses/addresses.routes';
@@ -16,6 +17,7 @@ import { eventSchema, offerSchema, gallerySchema } from '../modules/content/cont
 import uploadRoutes from '../modules/uploads/uploads.routes';
 
 const router = Router();
+router.use(businessAccessRoutes);
 
 router.use('/logistics', logisticsRoutes);
 router.use('/delivery-partners', deliveryPartnerRoutes);

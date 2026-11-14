@@ -12,8 +12,8 @@ export const requireService = async (id: string) => {
 };
 
 export const servicesService = {
-  async list(businessId: string) {
-    const { data, error } = await supabaseAdmin
+  async list(businessId: string, db = supabaseAdmin) {
+    const { data, error } = await db
       .from('services')
       .select(serviceSelect)
       .eq('business_id', businessId)
@@ -22,9 +22,9 @@ export const servicesService = {
     return hydrateCategoryNames(data || []);
   },
 
-  async create(businessId: string, input: any) {
+  async create(businessId: string, input: any, db = supabaseAdmin) {
     await validateCategory(businessId, 'service', input.categoryId);
-    const { data, error } = await supabaseAdmin.from('services').insert({
+    const { data, error } = await db.from('services').insert({
       business_id: businessId,
       folder_category_id: input.categoryId ?? null,
       category_id: input.categoryId ?? null,
@@ -47,7 +47,7 @@ export const servicesService = {
     return (await hydrateCategoryNames([data]))[0];
   },
 
-  async update(id: string, input: any) {
+  async update(id: string, input: any, db = supabaseAdmin) {
     const current = await requireService(id);
     await validateCategory(current.business_id, 'service', input.categoryId, current.folder_category_id);
     const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -78,14 +78,14 @@ export const servicesService = {
       update.cover_image_public_id = input.imagePublicId || cloudinaryPublicIdFromUrl(input.image) || null;
     }
 
-    const { data, error } = await supabaseAdmin.from('services').update(update).eq('id', id).select(serviceSelect).single();
+    const { data, error } = await db.from('services').update(update).eq('id', id).select(serviceSelect).single();
     if (error && ['23503','23514','40001','40P01'].includes(error.code)) categoryError(error);
     if (error || !data) throw new ApiError(error?.message || 'Service not found', error ? 400 : 404);
     return (await hydrateCategoryNames([data]))[0];
   },
 
-  async remove(id: string) {
-    const { error } = await supabaseAdmin.from('services').delete().eq('id', id);
+  async remove(id: string, db = supabaseAdmin) {
+    const { error } = await db.from('services').delete().eq('id', id);
     if (error) throw new ApiError(error.message, 400);
   },
 };

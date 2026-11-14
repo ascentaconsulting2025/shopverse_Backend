@@ -1,3 +1,5 @@
+import { z } from 'zod';
+import { businessAccessEnabled, businessDb, requireBusinessAccess } from '../business-access/access.service';
 import { createHmac } from 'node:crypto';
 import { env } from '../../config/env';
 import { getBusinessPackage, protectBusinessFields, requirePackageFeature } from '../packages/packages.service';
@@ -19,8 +21,8 @@ const toVisibility = (row: any) => ({
   upcoming_events: row?.upcoming_events ?? true,
 });
 
-async function loadVisibility(businessId: string) {
-  const { data, error } = await supabaseAdmin
+async function loadVisibility(businessId: string, db = supabaseAdmin) {
+  const { data, error } = await db
     .from('business_section_visibility')
     .select('products, services, special_offers, photo_gallery, upcoming_events')
     .eq('business_id', businessId)
@@ -30,9 +32,7 @@ async function loadVisibility(businessId: string) {
 }
 
 async function requireOwnedBusiness(businessId: string, req: any) {
-  const { data, error } = await supabaseAdmin.from('businesses').select('id, owner_id').eq('id', businessId).single();
-  if (error || !data) throw new ApiError('Business not found', 404);
-  if (data.owner_id !== req.user.id && !req.isAdmin) throw new ApiError('You do not own this business', 403);
+  return requireBusinessAccess(businessId,req);
 }
 
 const missingPhoneColumn = (error: any) =>
@@ -68,21 +68,21 @@ const toEvent = (row: any) => ({ id: row.id, title: { en: row.event_name_en, mr:
 const toOffer = (row: any) => ({ id: row.id, title: { en: row.offer_title_en, mr: row.offer_title_mr }, description: { en: row.terms_en, mr: row.terms_mr }, discountBadge: { en: row.discount_badge_en, mr: row.discount_badge_mr }, discountPercentage: row.discount_percentage == null ? undefined : Number(row.discount_percentage), couponCode: row.coupon_code, validUntil: { en: row.validity_en, mr: row.validity_mr }, imageUrl: row.image_url || '', imagePublicId: row.image_public_id || '', isActive: row.is_active });
 const toGallery = (row: any) => ({ id: row.id, url: row.image_url, imageUrl: row.image_url, imagePublicId: row.image_public_id || '', caption: row.caption, category: row.category, categoryId: row.global_category_id ?? null, sortOrder: row.sort_order, isActive: row.is_active });
 
-async function loadProducts(businessId: string) {
-  const { data, error } = await supabaseAdmin.from('products').select('*').eq('business_id', businessId).order('sort_order').order('created_at', { ascending: false });
+async function loadProducts(businessId: string, db = supabaseAdmin) {
+  const { data, error } = await db.from('products').select('*').eq('business_id', businessId).order('sort_order').order('created_at', { ascending: false });
   if (error) throw new ApiError(error.message, 400);
   return hydrateCategoryNames(data || []);
 }
 
-async function loadServices(businessId: string) {
-  const { data, error } = await supabaseAdmin.from('services').select('*').eq('business_id', businessId).order('created_at', { ascending: false });
+async function loadServices(businessId: string, db = supabaseAdmin) {
+  const { data, error } = await db.from('services').select('*').eq('business_id', businessId).order('created_at', { ascending: false });
   if (error) return null;
   return hydrateCategoryNames(data || []);
 }
 
-async function loadContent(businessId: string, includeInactive = false) {
+async function loadContent(businessId: string, includeInactive = false, db = supabaseAdmin) {
   const query = (table: string) => {
-    let result = supabaseAdmin.from(table).select('*').eq('business_id', businessId).is('deleted_at', null);
+    let result = db.from(table).select('*').eq('business_id', businessId).is('deleted_at', null);
     if (!includeInactive) result = result.eq('is_active', true);
     return result;
   };
@@ -96,8 +96,8 @@ async function loadContent(businessId: string, includeInactive = false) {
   return { events: events.data || [], offers: offers.data || [], gallery: await hydrateCategoryNames(gallery.data || []) };
 }
 
-async function loadPeople(businessId: string, includeInactive = false) {
-  let query = supabaseAdmin.from('business_people').select('*').eq('business_id', businessId).order('display_order').order('created_at');
+async function loadPeople(businessId: string, includeInactive = false, db = supabaseAdmin) {
+  let query = db.from('business_people').select('*').eq('business_id', businessId).order('display_order').order('created_at');
   if (!includeInactive) query = query.eq('is_active', true);
   const { data, error } = await query;
   if (error) throw new ApiError(error.message, 400);
@@ -105,14 +105,14 @@ async function loadPeople(businessId: string, includeInactive = false) {
 }
 
 /** Replaces the visible leadership set; omitted photos are released for cleanup. */
-async function savePeople(businessId: string, people: any[] | undefined) {
+async function savePeople(businessId: string, people: any[] | undefined, db = supabaseAdmin) {
   if (people === undefined) return;
   const activePrimary = people.filter((person) => person.isActive !== false && person.isPrimary);
   if (activePrimary.length > 1) throw new ApiError('Only one active primary person is allowed', 400);
   if (people.some((person) => person.isActive !== false) && activePrimary.length !== 1) throw new ApiError('Exactly one active primary person is required', 400);
 
   const incomingIds = people.map((person) => person.id).filter(Boolean);
-  const existing = await supabaseAdmin.from('business_people').select('id').eq('business_id', businessId);
+  const existing = await db.from('business_people').select('id').eq('business_id', businessId);
   if (existing.error) throw new ApiError(existing.error.message, 400);
   const existingIds = new Set((existing.data || []).map((person: any) => person.id));
   if (incomingIds.some((id) => !existingIds.has(id))) throw new ApiError('A leadership record does not belong to this business', 400);
@@ -120,11 +120,11 @@ async function savePeople(businessId: string, people: any[] | undefined) {
   // Deactivate omitted records; this is recoverable and prevents stale people from rendering.
   const omittedIds = [...existingIds].filter((id) => !incomingIds.includes(id));
   if (omittedIds.length) {
-    const { error } = await supabaseAdmin.from('business_people').update({ is_active: false, is_primary: false, profile_image_url: null, profile_image_public_id: null, updated_at: new Date().toISOString() }).in('id', omittedIds);
+    const { error } = await db.from('business_people').update({ is_active: false, is_primary: false, profile_image_url: null, profile_image_public_id: null, updated_at: new Date().toISOString() }).in('id', omittedIds);
     if (error) throw new ApiError(error.message, 400);
   }
   // Clear an existing primary first so the partial unique index is never violated.
-  const clearPrimary = await supabaseAdmin.from('business_people').update({ is_primary: false }).eq('business_id', businessId).eq('is_primary', true);
+  const clearPrimary = await db.from('business_people').update({ is_primary: false }).eq('business_id', businessId).eq('is_primary', true);
   if (clearPrimary.error) throw new ApiError(clearPrimary.error.message, 400);
   for (const person of people) {
     const payload = {
@@ -143,57 +143,82 @@ async function savePeople(businessId: string, people: any[] | undefined) {
       updated_at: new Date().toISOString(),
     };
     const result = person.id
-      ? await supabaseAdmin.from('business_people').update(payload).eq('id', person.id).eq('business_id', businessId)
-      : await supabaseAdmin.from('business_people').insert(payload);
+      ? await db.from('business_people').update(payload).eq('id', person.id).eq('business_id', businessId)
+      : await db.from('business_people').insert(payload);
     if (result.error) throw new ApiError(result.error.message, 400);
   }
 }
 
-async function insertBusiness(card: Record<string, any>, ownerId: string) {
-  let result = await supabaseAdmin.from('businesses').insert(toBusinessWrite(card, ownerId)).select().single();
-  if (missingPhoneColumn(result.error)) {
-    result = await supabaseAdmin.from('businesses').insert(toBusinessWrite(card, ownerId, false)).select().single();
+async function insertBusiness(card: Record<string, any>, ownerId: string | null, db = supabaseAdmin) {
+  if (businessAccessEnabled()) {
+    const people = (card.people || []).map((person: any) => {
+      if (person.id) throw new ApiError('A new business cannot reference an existing leadership record',400);
+      return {
+        full_name_en: person.fullName.en || person.fullName.mr,
+        full_name_mr: person.fullName.mr || null,
+        designation_en: person.designation?.en || null, designation_mr: person.designation?.mr || null,
+        description_en: person.description?.en || null, description_mr: person.description?.mr || null,
+        profile_image_url: person.profileImage || null,
+        profile_image_public_id: person.profileImagePublicId || cloudinaryPublicIdFromUrl(person.profileImage) || null,
+        display_order: person.displayOrder ?? 0, is_primary: person.isPrimary === true, is_active: person.isActive !== false,
+      };
+    });
+    let result = await db.rpc('business_create_with_people', {p_business:toBusinessWrite(card,ownerId),p_people:people,p_request_id:card.creationRequestId || null});
+    if (missingPhoneColumn(result.error)) result = await db.rpc('business_create_with_people', {p_business:toBusinessWrite(card,ownerId,false),p_people:people,p_request_id:card.creationRequestId || null});
+    return result;
   }
+  let result = await db.from('businesses').insert(toBusinessWrite(card, ownerId)).select().single();
+  if (missingPhoneColumn(result.error)) result = await db.from('businesses').insert(toBusinessWrite(card, ownerId, false)).select().single();
   return result;
 }
 
-async function saveBusiness(id: string, card: Record<string, any>, trusted: { plan: boolean; verification: boolean }) {
+async function saveBusiness(id: string, card: Record<string, any>, trusted: { plan: boolean; verification: boolean }, db = supabaseAdmin) {
   const payload = (phone = true) => {
     const value: any = toBusinessWrite(card, undefined, phone);
     if (!trusted.plan) delete value.plan_id;
     if (!trusted.verification) delete value.is_verified;
     return value;
   };
-  let result = await supabaseAdmin.from('businesses').update(payload()).eq('id', id).select().single();
+  let result = await db.from('businesses').update(payload()).eq('id', id).select().single();
   if (missingPhoneColumn(result.error)) {
-    result = await supabaseAdmin.from('businesses').update(payload(false)).eq('id', id).select().single();
+    result = await db.from('businesses').update(payload(false)).eq('id', id).select().single();
   }
   return result;
 }
 
 export const createBusiness = asyncHandler(async (req, res) => {
   const user = (req as any).user;
+  if (req.body.creationRequestId !== undefined) z.string().uuid().parse(req.body.creationRequestId);
   protectBusinessFields(req.body, null, !!(req as any).isAdmin);
   await validateCategory('', 'business', req.body.categoryId);
   const name = typeof req.body.businessName === 'object'
     ? req.body.businessName.en || req.body.businessName.mr
     : req.body.businessName;
+  let ownerId: string | null = user.id;
+  if (businessAccessEnabled()) {
+    if (!(req as any).isAdmin && req.body.assignedOwnerId !== undefined) throw new ApiError('Only administrators may select another owner',403);
+    ownerId = (req as any).isAdmin ? z.string().uuid().nullable().parse(req.body.assignedOwnerId ?? null) : user.id;
+    if (ownerId && ownerId !== user.id) {
+      const target = await supabaseAdmin.auth.admin.getUserById(ownerId);
+      if (target.error || !target.data.user?.email_confirmed_at || Date.parse((target.data.user as any).banned_until || '') > Date.now()) throw new ApiError('Select an active verified owner',400);
+    }
+  }
   const baseSlug = slugify(req.body.slug || name || 'business') || `business-${uniqueSuffix()}`;
   let lastError: any = null;
 
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const slug = attempt === 0 ? baseSlug : `${baseSlug}-${uniqueSuffix()}`;
-    const result = await insertBusiness({ ...req.body, slug }, user.id);
+    const result = await insertBusiness({ ...req.body, slug }, ownerId, businessDb(req));
     if (!result.error) {
-      await savePeople(result.data.id, req.body.people);
-      res.status(201).json(apiSuccess({ ...toCard((await hydrateCategoryNames([result.data]))[0]), people: await loadPeople(result.data.id, true) }));
+      if (!businessAccessEnabled()) await savePeople(result.data.id, req.body.people, businessDb(req));
+      res.status(201).json(apiSuccess({ ...toCard((await hydrateCategoryNames([result.data]))[0]), people: await loadPeople(result.data.id, true, businessDb(req)), accessEnabled: businessAccessEnabled(), membershipRole: ownerId === user.id ? 'owner' : null }));
       return;
     }
     lastError = result.error;
     if (result.error.code !== '23505') break;
   }
 
-  throw new ApiError(lastError?.message || 'Unable to create business', lastError?.code === '23505' ? 409 : 400);
+  throw new ApiError(lastError?.message || 'Unable to create business', ['23505','40001'].includes(lastError?.code) ? 409 : 400);
 });
 
 export const getBusinessBySlug = asyncHandler(async (req, res) => {
@@ -332,7 +357,7 @@ export const updateBusiness = asyncHandler(async (req, res) => {
   const user = (req as any).user;
   const { data: current, error: findError } = await supabaseAdmin.from('businesses').select('*').eq('id', req.params.id).single();
   if (findError || !current) throw new ApiError('Business not found', 404);
-  if (current.owner_id !== user.id && !(req as any).isAdmin) throw new ApiError('You do not own this business', 403);
+  await requireBusinessAccess(current.id,req);
   await validateCategory(current.id, 'business', req.body.categoryId, current.global_category_id);
   const trusted = { plan: !!(req as any).isAdmin && req.body.planId !== undefined, verification: !!(req as any).isAdmin && req.body.isVerified !== undefined };
   protectBusinessFields(req.body, current, !!(req as any).isAdmin);
@@ -343,7 +368,7 @@ export const updateBusiness = asyncHandler(async (req, res) => {
   const merged = { ...toCard(current), ...req.body, id: current.id, slug: req.body.slug ?? current.slug };
   for (const key of ['products','services','offers','events','gallery','package']) delete merged[key];
   merged.stats = current.details?.stats || {};
-  const { data, error } = await saveBusiness(current.id, merged, trusted);
+  const { data, error } = await saveBusiness(current.id, merged, trusted, businessDb(req));
   if (error) {
     if (error.code === '23505' && /slug/i.test(error.message || '')) {
       throw new ApiError('This slug is already in use. Please choose another slug.', 409);
@@ -351,9 +376,9 @@ export const updateBusiness = asyncHandler(async (req, res) => {
     if (/requires (?:Premium|Standard or Premium)/.test(error.message || '')) throw new ApiError(error.message, 403);
     throw new ApiError('Unable to update business information', 400);
   }
-  await savePeople(current.id, req.body.people);
-  const content = await loadContent(current.id, true);
-  res.json(apiSuccess({ ...toCard((await hydrateCategoryNames([data]))[0]), events: content.events.map(toEvent), offers: content.offers.map(toOffer), gallery: content.gallery.map(toGallery), categories: await loadCategories(current.id), products: (await loadProducts(current.id)).map(toProduct), services: (await loadServices(current.id) || []).map(toService), people: await loadPeople(current.id, true) }));
+  await savePeople(current.id, req.body.people, businessDb(req));
+  const content = await loadContent(current.id, true, businessDb(req));
+  res.json(apiSuccess({ ...toCard((await hydrateCategoryNames([data]))[0]), accessEnabled: businessAccessEnabled(), membershipRole: await requireBusinessAccess(current.id,req), events: content.events.map(toEvent), offers: content.offers.map(toOffer), gallery: content.gallery.map(toGallery), categories: await loadCategories(current.id), products: (await loadProducts(current.id,businessDb(req))).map(toProduct), services: (await loadServices(current.id,businessDb(req)) || []).map(toService), people: await loadPeople(current.id, true,businessDb(req)) }));
 });
 
 export const deleteBusiness = asyncHandler(async (req, res) => {
@@ -376,21 +401,44 @@ export const deleteBusiness = asyncHandler(async (req, res) => {
     throw new ApiError('Password is incorrect', 401);
   }
 
-  const { error } = await supabaseAdmin.from('businesses').delete().eq('id', current.id);
+  await requireBusinessAccess(current.id,req,true);
+  const { error } = await businessDb(req).from('businesses').delete().eq('id', current.id);
   if (error) throw new ApiError(error.message, 400);
   res.json(apiSuccess(null));
 });
 
 export const listMyBusinesses = asyncHandler(async (req, res) => {
-  let query = supabaseAdmin.from('businesses').select('*').order('created_at', { ascending: false });
-  if (!(req as any).isAdmin) query = query.eq('owner_id', (req as any).user.id);
+  const db = businessDb(req);
+  let query = db.from('businesses').select('*').order('created_at', { ascending: false });
+  const memberships = new Map<string,string>();
+  if (businessAccessEnabled()) {
+    const result = await db.from('business_members').select('business_id,role').eq('user_id',(req as any).user.id).eq('status','active');
+    if(result.error) throw new ApiError('Business access is unavailable',503);
+    for(const row of result.data || []) memberships.set(row.business_id,row.role);
+    if (!(req as any).isAdmin) {
+      if (!memberships.size) { res.json(apiSuccess([])); return; }
+      query=query.in('id',[...memberships.keys()]);
+    } else {
+      const allowed=await db.rpc('business_is_admin');
+      if(allowed.error || !allowed.data) throw new ApiError('Database administrator access is not configured',403);
+    }
+  } else if (!(req as any).isAdmin) query = query.eq('owner_id', (req as any).user.id);
   const { data, error } = await query;
   if (error) throw new ApiError(error.message, 400);
   const cards = await Promise.all(data.map(async (row) => {
-    const [products, services, visibility, people, content] = await Promise.all([loadProducts(row.id), loadServices(row.id), loadVisibility(row.id), loadPeople(row.id, true), loadContent(row.id, true)]);
+    const [products, services, visibility, people, content] = await Promise.all([loadProducts(row.id,db), loadServices(row.id,db), loadVisibility(row.id,db), loadPeople(row.id, true,db), loadContent(row.id, true,db)]);
     const card = toCard((await hydrateCategoryNames([row]))[0]);
+    let managerCount: number | undefined;
+    if(businessAccessEnabled() && row.owner_id===(req as any).user.id) {
+      const members=await db.from('business_members').select('id',{count:'exact',head:true}).eq('business_id',row.id).eq('role','manager').eq('status','active');
+      if(members.error) throw new ApiError('Manager count unavailable',503);
+      managerCount=members.count||0;
+    }
     return {
       ...card,
+      managerCount,
+      accessEnabled: businessAccessEnabled(),
+      membershipRole: businessAccessEnabled() ? memberships.get(row.id) || null : row.owner_id === (req as any).user.id ? 'owner' : null,
       events: content.events.map(toEvent), offers: content.offers.map(toOffer), gallery: content.gallery.map(toGallery),
       sectionVisibility: { products: visibility.products, services: visibility.services, offers: visibility.special_offers, gallery: visibility.photo_gallery, events: visibility.upcoming_events },
       categories: await loadCategories(row.id),
@@ -404,13 +452,13 @@ export const listMyBusinesses = asyncHandler(async (req, res) => {
 
 export const getSectionVisibility = asyncHandler(async (req, res) => {
   await requireOwnedBusiness(req.params.id, req);
-  res.json(apiSuccess(await loadVisibility(req.params.id)));
+  res.json(apiSuccess(await loadVisibility(req.params.id,businessDb(req))));
 });
 
 export const updateSectionVisibility = asyncHandler(async (req, res) => {
   await requireOwnedBusiness(req.params.id, req);
   const visibility = sectionVisibilitySchema.parse(req.body);
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await businessDb(req)
     .from('business_section_visibility')
     .upsert({ business_id: req.params.id, ...visibility, updated_at: new Date().toISOString() }, { onConflict: 'business_id' })
     .select('products, services, special_offers, photo_gallery, upcoming_events')

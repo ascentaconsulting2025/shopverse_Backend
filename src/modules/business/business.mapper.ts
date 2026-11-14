@@ -27,7 +27,8 @@ function plainText(value: any): string {
 }
 
 export function toCard(row: any): any {
-  const details = row.details || {};
+  const details = { ...(row.details || {}) };
+  for (const key of ['membershipRole','accessEnabled','assignedOwnerId','managerCount','createdBy','created_by']) delete details[key];
   const socialLinks = {
     ...(details.socialLinks && typeof details.socialLinks === 'object' && !Array.isArray(details.socialLinks) ? details.socialLinks : {}),
     ...(row.social_links && typeof row.social_links === 'object' && !Array.isArray(row.social_links) ? row.social_links : {}),
@@ -89,15 +90,15 @@ export function toBusinessPerson(row: any) {
   };
 }
 
-export function toBusinessWrite(card: Record<string, any>, ownerId?: string, includePhone = true) {
+export function toBusinessWrite(card: Record<string, any>, ownerId?: string | null, includePhone = true) {
   const name = typeof card.businessName === 'object' ? card.businessName.en || card.businessName.mr : card.businessName;
   const category = typeof card.category === 'object' ? card.category.en || card.category.mr : card.category;
   const details = { ...card };
   if(card.categoryId) delete details.category;
   delete details.categoryId;
-  for (const key of ['products','services','events','offers','gallery','package','details','profile_views','profileViews','plan_id','is_verified','owner_id']) delete details[key];
+  for (const key of ['products','services','events','offers','gallery','package','details','profile_views','profileViews','plan_id','is_verified','owner_id','created_by','createdBy','assignedOwnerId','membershipRole','managerCount','accessEnabled','ownership_review_required','userId','creationRequestId']) delete details[key];
   return {
-    ...(ownerId ? { owner_id: ownerId } : {}),
+    ...(ownerId !== undefined ? { owner_id: ownerId } : {}),
     business_name: name || 'Untitled business', business_name_mr: nullableMarathi(card.businessName), slug: card.slug,
     ...(card.categoryId !== undefined ? {global_category_id: card.categoryId} : {}),
     category_mr: card.categoryId ? null : nullableMarathi(card.category),
