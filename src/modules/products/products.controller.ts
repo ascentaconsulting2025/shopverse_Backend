@@ -9,7 +9,7 @@ import { productsService, requireProduct } from './products.service';
 
 const toProduct = (row: any) => ({
   images: row.images || [], specifications: row.specifications || {},
-  id: row.id, categoryId: row.folder_category_id ?? null, isPublished: row.is_published !== false,
+  id: row.id, fleetTypeId: row.fleet_type_id, categoryId: row.folder_category_id ?? null, isPublished: row.is_published !== false,
   name: { en: row.name_en ?? row.name ?? '', mr: row.name_mr ?? row.name ?? '' },
   description: { en: row.description_en ?? row.description ?? '', mr: row.description_mr ?? row.description ?? '' },
   price: row.price == null || Number(row.price) <= 0 ? undefined : Number(row.price), originalPrice: row.original_price == null || Number(row.original_price) <= 0 ? undefined : Number(row.original_price),

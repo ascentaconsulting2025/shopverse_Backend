@@ -1,3 +1,6 @@
+import pickupRoutes from '../modules/fulfillment/pickup.routes';
+import pricingRoutes from '../modules/fulfillment/pricing.routes';
+import fleetRoutes from '../modules/fleet/fleet.routes';
 import businessAccessRoutes from '../modules/business-access/access.routes';
 import logisticsRoutes from '../modules/logistics/logistics.routes';
 import deliveryPartnerRoutes from '../modules/delivery-partners/delivery-partners.routes';
@@ -19,6 +22,9 @@ import uploadRoutes from '../modules/uploads/uploads.routes';
 const router = Router();
 router.use(businessAccessRoutes);
 
+router.use('/fulfillment/pricing', pricingRoutes);
+router.use('/fulfillment/pickup', pickupRoutes);
+router.use('/fleet-types', fleetRoutes);
 router.use('/logistics', logisticsRoutes);
 router.use('/delivery-partners', deliveryPartnerRoutes);
 router.use('/addresses', addressRoutes);

@@ -22,6 +22,7 @@ export const productsService = {
     await validateCategory(businessId, 'product', input.categoryId);
 		const { data, error } = await db.from('products').insert({
 			business_id: businessId,
+      ...(input.fleetTypeId !== undefined ? {fleet_type_id: input.fleetTypeId} : {}),
       ...(input.images !== undefined ? {images: input.images} : {}),
       ...(input.specifications !== undefined ? {specifications: input.specifications} : {}),
       folder_category_id: input.categoryId ?? null,
@@ -43,7 +44,7 @@ export const productsService = {
 			is_available: input.isAvailable,
 			sort_order: input.sortOrder ?? 0,
 		}).select(productSelect).single();
-		if (error) { if (['23503','23514','40001','40P01'].includes(error.code)) categoryError(error); throw new ApiError(error.message,400); }
+		if (error) { if (error.message?.includes('Fleet type unavailable')) throw new ApiError('Select an active fleet type.',409); if (['23503','23514','40001','40P01'].includes(error.code)) categoryError(error); throw new ApiError(error.message,400); }
 		return (await hydrateCategoryNames([data]))[0];
 	},
 	async update(id: string, input: any, db = supabaseAdmin) {
@@ -51,6 +52,7 @@ export const productsService = {
     await validateCategory(current.business_id, 'product', input.categoryId, current.folder_category_id);
 		const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
 		if (input.images !== undefined) update.images = input.images;
+    if (input.fleetTypeId !== undefined && input.fleetTypeId !== current.fleet_type_id) update.fleet_type_id = input.fleetTypeId;
     if (input.specifications !== undefined) update.specifications = input.specifications;
     if (input.categoryId !== undefined) { update.folder_category_id = input.categoryId; update.category_id = input.categoryId; }
     if(input.categoryId && input.categoryId !== current.folder_category_id) { update.category=null; update.category_en=null; update.category_mr=null; }
@@ -67,7 +69,8 @@ export const productsService = {
 		if (input.isAvailable !== undefined) update.is_available = input.isAvailable;
 		if (input.sortOrder !== undefined) update.sort_order = input.sortOrder;
 		const { data, error } = await db.from('products').update(update).eq('id', id).select(productSelect).single();
-		if (error && ['23503','23514','40001','40P01'].includes(error.code)) categoryError(error);
+		if (error?.message?.includes('Fleet type unavailable')) throw new ApiError('Select an active fleet type.',409);
+    if (error && ['23503','23514','40001','40P01'].includes(error.code)) categoryError(error);
     if (error || !data) throw new ApiError(error?.message || 'Product not found', error ? 400 : 404);
 		return (await hydrateCategoryNames([data]))[0];
 	},

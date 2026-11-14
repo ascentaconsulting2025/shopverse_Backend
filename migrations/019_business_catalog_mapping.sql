@@ -69,6 +69,12 @@ begin
   if not exists(select 1 from business_categories where id=selected and catalog_kind='business' and status='enabled' and is_published) then
    raise exception 'Select an active business category' using errcode='23514';end if;
  else
+  -- Unrelated listing updates (for example fleet metadata backfills) must not
+  -- revalidate unchanged legacy catalog assignments.
+  if tg_op='UPDATE'
+   and new.business_id is not distinct from old.business_id
+   and new.folder_category_id is not distinct from old.folder_category_id
+   and new.category_id is not distinct from old.category_id then return new;end if;
   select global_category_id into business_category from businesses where id=new.business_id for share;
   if not catalog_category_allowed(business_category,case when tg_table_name='products' then 'product' else 'service' end,new.folder_category_id)
    or new.category_id is distinct from new.folder_category_id then

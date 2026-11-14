@@ -6,6 +6,7 @@ export const createProductSchema = z.object({
   images: z.array(z.string().url().regex(/^https?:\/\//)).max(12).optional(),
   specifications: z.record(z.string().max(80), z.string().max(500)).refine(v => Object.keys(v).length <= 30).optional(),
   categoryId: z.string().uuid().nullable().optional(),
+  fleetTypeId: z.string().uuid().optional(),
   isPublished: z.boolean().optional(),
   name: bilingualField,
   description: bilingualField,
