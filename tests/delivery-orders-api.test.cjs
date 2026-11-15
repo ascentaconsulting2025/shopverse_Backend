@@ -2,10 +2,10 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),path=requ
 const root=process.env.SHOPVERSE_TEST_DIST;if(!root)throw new Error('Set SHOPVERSE_TEST_DIST');
 const dbPath=path.join(root,'config/supabaseClient.js'),quotePath=path.join(root,'modules/fulfillment/delivery-quote.js');
 const store='10000000-0000-4000-8000-000000000001',order='20000000-0000-4000-8000-000000000001',address='30000000-0000-4000-8000-000000000001',fleet='40000000-0000-4000-8000-000000000001',key='50000000-0000-4000-8000-000000000001';
-let calls=[],row=null,rpcError=null;
+let calls=[],row=null,rpcError=null,destination={};
 const chain={select(){return this},eq(){return this},maybeSingle:async()=>({data:row,error:null})};
 require.cache[dbPath]={id:dbPath,filename:dbPath,loaded:true,exports:{supabaseAdmin:{from(){return chain},rpc:async(name,args)=>{calls.push({name,args});return {data:true,error:rpcError}}}}};
-require.cache[quotePath]={id:quotePath,filename:quotePath,loaded:true,exports:{quoteDeliveryCart:async()=>({fleet:{id:fleet},options:[{speed:'urgent',charge:40}],distanceKm:2,config:{},origin:{},destination:{}})}};
+require.cache[quotePath]={id:quotePath,filename:quotePath,loaded:true,exports:{quoteDeliveryCart:async()=>({fleet:{id:fleet},options:[{speed:'urgent',charge:40}],distanceKm:2,config:{},origin:{},destination})}};
 const router=require(path.join(root,'modules/orders/orders.routes.js')).default;
 function run(route,method,req){const handler=router.stack.find(x=>x.route?.path===route&&x.route.methods[method]).route.stack.at(-1).handle;return new Promise((resolve,reject)=>handler({user:{id:'buyer'},params:{id:order},body:{},query:{},...req},{json:resolve},reject));}
 test('rejects stale delivery quote before creating an order',async()=>{calls=[];row=null;await assert.rejects(run('/place-delivery','post',{body:{storeId:store,requestKey:key,addressId:address,method:'urgent',expectedFleetId:fleet,expectedFee:39,items:[{id:order,quantity:1,price:10}]}}),e=>e.status===409);assert.equal(calls.length,0)});
@@ -20,4 +20,11 @@ test('delivery checkout reports missing RPC setup and logs no provider message',
   assert.equal(calls[0].name,'place_delivery_store_request');
   assert.deepEqual(logs,[['Delivery checkout failed',{stage:'save',code:'PGRST202'}]]);
  } finally {console.error=original;rpcError=null;}
+});
+
+test('invalid saved phone returns actionable checkout guidance',async()=>{
+ row=null;rpcError={code:'P0001',message:'Invalid request'};destination={phone_number:'12345'};
+ try {
+  await assert.rejects(run('/place-delivery','post',{body:{storeId:store,requestKey:key,addressId:address,method:'urgent',expectedFleetId:fleet,expectedFee:40,items:[{id:order,quantity:1,price:10}]}}),e=>e.status===409&&/valid Indian mobile/.test(e.message));
+ } finally {rpcError=null;destination={};}
 });

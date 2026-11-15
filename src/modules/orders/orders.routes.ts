@@ -36,9 +36,11 @@ router.post('/place', publicRateLimiter, asyncHandler(async(req,res) => {
   res.json(apiSuccess({order,whatsapp:store.data?.details?.whatsapp || store.data?.whatsapp_number || '',replayed:result.data.replayed}));
 }));
 // Log only the operation and provider code; never customer data or provider messages.
-function deliveryOrderFailure(stage:string,error:{code?:string}) {
+function deliveryOrderFailure(stage:string,error:{code?:string;message?:string}) {
  const code=typeof error.code==='string'&&/^[A-Z0-9]{5,12}$/.test(error.code)?error.code:'UNKNOWN';
- console.error('Delivery checkout failed',{stage,code});
+ const knownMessages=['Invalid request','Invalid delivery'];
+ const reason=code==='P0001'?(knownMessages.includes(error.message || '')?error.message:'other'):undefined;
+ console.error('Delivery checkout failed',{stage,code,...(reason?{reason}:{})});
  if(['PGRST202','PGRST204','PGRST200','42P01','42703','42883'].includes(code))
   return new ApiError('Delivery ordering setup is incomplete. Please contact the shop administrator.',503,'ORDER_SETUP_REQUIRED');
  return new ApiError('Unable to complete delivery checkout.',503);
@@ -65,7 +67,17 @@ router.post('/place-delivery',publicRateLimiter,asyncHandler(async(req,res)=>{
    const option=quote.options.find(x=>x.speed===input.method);if(!option)throw new ApiError('That delivery speed is unavailable.',409);
    if(quote.fleet.id!==input.expectedFleetId||Math.round(option.charge*100)!==Math.round(input.expectedFee*100))throw new ApiError('Delivery charge or fleet changed. Refresh and review the updated quote.',409);
    const result=await supabaseAdmin.rpc('place_delivery_store_request',{p_customer:user,p_store:input.storeId,p_key:input.requestKey,p_address_id:input.addressId,p_expected:input.items,p_method:input.method,p_fleet:quote.fleet.id,p_distance:quote.distanceKm,p_fee:option.charge,p_config:quote.config,p_origin:quote.origin,p_destination:quote.destination});
-   if(result.error){if(/changed|unavailable|Invalid cart|Request key/i.test(result.error.message||''))throw new ApiError('Cart, address or delivery details changed. Refresh and review.',409);throw deliveryOrderFailure('save',result.error);}orderId=result.data.store_order_id;replayed=!!result.data.replayed;
+   if(result.error){
+    if(/changed|unavailable|Invalid cart|Request key/i.test(result.error.message||''))throw new ApiError('Cart, address or delivery details changed. Refresh and review.',409);
+    if(result.error.code==='P0001'&&result.error.message==='Invalid request'){
+     const destination=quote.destination;
+     const digits=String(destination.phone_number||'').replace(/\D/g,'');
+     if(!/^(?:91)?[6-9]\d{9}$/.test(digits))throw new ApiError('Edit your delivery address and enter a valid Indian mobile number.',409);
+     const address=[destination.address_line_1,destination.address_line_2,destination.landmark,destination.city,destination.state,destination.postal_code,destination.country].filter(Boolean).join(', ').trim();
+     if(address.length>500)throw new ApiError('Edit your delivery address to shorten it to 500 characters or fewer.',409);
+    }
+    throw deliveryOrderFailure('save',result.error);
+   }orderId=result.data.store_order_id;replayed=!!result.data.replayed;
   }
  }
  const [order,store]=await Promise.all([supabaseAdmin.from('marketplace_store_orders').select(`${selection},order_id`).eq('id',orderId).single(),supabaseAdmin.from('businesses').select('whatsapp_number,details').eq('id',input.storeId).maybeSingle()]);
