@@ -35,11 +35,19 @@ router.post('/place', publicRateLimiter, asyncHandler(async(req,res) => {
   if(store.error) throw new ApiError('Request saved but store details could not be loaded. Retry.',503);
   res.json(apiSuccess({order,whatsapp:store.data?.details?.whatsapp || store.data?.whatsapp_number || '',replayed:result.data.replayed}));
 }));
+// Log only the operation and provider code; never customer data or provider messages.
+function deliveryOrderFailure(stage:string,error:{code?:string}) {
+ const code=typeof error.code==='string'&&/^[A-Z0-9]{5,12}$/.test(error.code)?error.code:'UNKNOWN';
+ console.error('Delivery checkout failed',{stage,code});
+ if(['PGRST202','PGRST204','PGRST200','42P01','42703','42883'].includes(code))
+  return new ApiError('Delivery ordering setup is incomplete. Please contact the shop administrator.',503,'ORDER_SETUP_REQUIRED');
+ return new ApiError('Unable to complete delivery checkout.',503);
+}
 router.post('/place-delivery',publicRateLimiter,asyncHandler(async(req,res)=>{
  const input=z.object({storeId:z.string().uuid(),requestKey:z.string().uuid(),addressId:z.string().uuid(),method:z.enum(['standard_4_6h','standard_24h','urgent']),expectedFleetId:z.string().uuid(),expectedFee:z.number().finite().nonnegative().max(100000000),items:z.array(z.object({id:z.string().uuid(),quantity:z.number().int().min(1).max(999),price:z.number().nonnegative().nullable()})).min(1).max(100)}).strict().parse(req.body);
  const user=(req as any).user.id;
  const prior=await supabaseAdmin.from('marketplace_orders').select('id,delivery_address_snapshot,marketplace_store_orders(id,business_id,fulfillment_method)').eq('customer_id',user).eq('request_key',input.requestKey).maybeSingle();
- if(prior.error)throw new ApiError('Unable to check order request.',503);
+ if(prior.error)throw deliveryOrderFailure('lookup',prior.error);
  const existing=(prior.data as any)?.marketplace_store_orders?.[0];
  if(prior.data&&(!existing||existing.business_id!==input.storeId||existing.fulfillment_method!==input.method||(prior.data as any).delivery_address_snapshot?.id!==input.addressId))throw new ApiError('Request key already used.',409);
  let orderId=existing?.id,replayed=!!existing;
@@ -48,7 +56,7 @@ router.post('/place-delivery',publicRateLimiter,asyncHandler(async(req,res)=>{
   try{quote=await quoteDeliveryCart(user,input.storeId,input.addressId);}catch(error){
    // A concurrent request may have committed after the first lookup and cleared the cart.
    const recovered=await supabaseAdmin.from('marketplace_orders').select('delivery_address_snapshot,marketplace_store_orders(id,business_id,fulfillment_method)').eq('customer_id',user).eq('request_key',input.requestKey).maybeSingle();
-   if(recovered.error)throw new ApiError('Unable to check order request.',503);
+   if(recovered.error)throw deliveryOrderFailure('recovery',recovered.error);
    const saved=(recovered.data as any)?.marketplace_store_orders?.[0];
    if(saved&&saved.business_id===input.storeId&&saved.fulfillment_method===input.method&&(recovered.data as any).delivery_address_snapshot?.id===input.addressId){orderId=saved.id;replayed=true;}
    else throw error;
@@ -57,11 +65,12 @@ router.post('/place-delivery',publicRateLimiter,asyncHandler(async(req,res)=>{
    const option=quote.options.find(x=>x.speed===input.method);if(!option)throw new ApiError('That delivery speed is unavailable.',409);
    if(quote.fleet.id!==input.expectedFleetId||Math.round(option.charge*100)!==Math.round(input.expectedFee*100))throw new ApiError('Delivery charge or fleet changed. Refresh and review the updated quote.',409);
    const result=await supabaseAdmin.rpc('place_delivery_store_request',{p_customer:user,p_store:input.storeId,p_key:input.requestKey,p_address_id:input.addressId,p_expected:input.items,p_method:input.method,p_fleet:quote.fleet.id,p_distance:quote.distanceKm,p_fee:option.charge,p_config:quote.config,p_origin:quote.origin,p_destination:quote.destination});
-   if(result.error){if(/changed|unavailable|Invalid cart|Request key/i.test(result.error.message||''))throw new ApiError('Cart, address or delivery details changed. Refresh and review.',409);throw new ApiError('Unable to save delivery request.',503);}orderId=result.data.store_order_id;replayed=!!result.data.replayed;
+   if(result.error){if(/changed|unavailable|Invalid cart|Request key/i.test(result.error.message||''))throw new ApiError('Cart, address or delivery details changed. Refresh and review.',409);throw deliveryOrderFailure('save',result.error);}orderId=result.data.store_order_id;replayed=!!result.data.replayed;
   }
  }
  const [order,store]=await Promise.all([supabaseAdmin.from('marketplace_store_orders').select(`${selection},order_id`).eq('id',orderId).single(),supabaseAdmin.from('businesses').select('whatsapp_number,details').eq('id',input.storeId).maybeSingle()]);
- if(order.error||store.error)throw new ApiError('Request saved but details could not be loaded. Retry using the same request.',503);
+ if(order.error)throw deliveryOrderFailure('load_order',order.error);
+ if(store.error)throw deliveryOrderFailure('load_store',store.error);
  res.json(apiSuccess({order:order.data,whatsapp:store.data?.details?.whatsapp||store.data?.whatsapp_number||'',replayed}));
 }));
 router.post('/place-pickup',publicRateLimiter,asyncHandler(async(req,res)=>{

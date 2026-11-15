@@ -8,7 +8,6 @@ create function auth.uid() returns uuid language sql stable as $$ select null::u
 \i 'shopverse_Backend/migrations/033_delivery_partner_admin_controls.sql'
 \i 'shopverse_Backend/migrations/034_logistics_operations.sql'
 \i 'shopverse_Backend/migrations/036_fulfillment_fleet_and_pickup.sql'
-\i 'shopverse_Backend/migrations/047_delivery_checkout_allocation.sql'
 update businesses set details='{"address":{"street":{"en":"Shop 1"},"city":{"en":"Pune"},"state":{"en":"Maharashtra"},"latitude":18.5,"longitude":73.8},"businessHours":{"days":{"en":"Mon - Sun"},"timings":{"en":"9:00 AM - 8:00 PM"},"timezone":"Asia/Kolkata"}}' where id='10000000-0000-0000-0000-000000000001';
 insert into customer_addresses(id,user_id,full_name,phone_number,address_line_1,address_line_2,city,state,postal_code,country,address_type,latitude,longitude,is_default) values('80000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001','Customer','9876543210','Road','Area','Pune','Maharashtra','411001','India','Home',18.51,73.81,true);
 insert into customer_cart_items(customer_id,product_id,quantity) values('00000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001',2);
