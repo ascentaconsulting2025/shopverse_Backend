@@ -10,6 +10,17 @@ import { pickupSlots } from './pickup-slots';
 const router=Router();router.use(authGuard);
 router.get('/settings',asyncHandler(async(req,res)=>{if(!(req as any).isAdmin)throw new ApiError('Super admin access required.',403);const {data,error}=await db.from('pickup_settings').select('lead_minutes').eq('id',true).single();if(error)throw new ApiError('Pickup settings unavailable.',503);res.json(apiSuccess(data));}));
 router.put('/settings',publicRateLimiter,asyncHandler(async(req,res)=>{if(!(req as any).isAdmin)throw new ApiError('Super admin access required.',403);const input=z.object({leadMinutes:z.number().int().min(0).max(10080)}).strict().parse(req.body);const {error}=await db.from('pickup_settings').update({lead_minutes:input.leadMinutes,updated_by:(req as any).user.id,updated_at:new Date().toISOString()}).eq('id',true);if(error)throw new ApiError('Unable to save pickup settings.',503);res.json(apiSuccess(input));}));
+router.get('/stores/:id/info',asyncHandler(async(req,res)=>{
+ const id=z.string().uuid().parse(req.params.id);
+ const {data,error}=await db.from('businesses').select('is_published,details').eq('id',id).maybeSingle();
+ if(error)throw new ApiError('Unable to load pickup information.',503);
+ if(!data?.is_published)throw new ApiError('Store unavailable.',404);
+ const details=data.details as any,address=details?.address,hours=details?.businessHours;
+ const plain=(v:any)=>typeof v==='string'?v.trim():typeof v?.en==='string'?v.en.trim():'';
+ const addressText=[plain(address?.street),plain(address?.landmark),plain(address?.city),plain(address?.state),plain(address?.pincode)].filter(Boolean).join(', ');
+ const available=!!(plain(address?.street)&&plain(address?.city)&&typeof hours?.timezone==='string'&&hours.timezone.trim());
+ res.json(apiSuccess({available,address:available?addressText:null}));
+}));
 router.get('/stores/:id/slots',publicRateLimiter,asyncHandler(async(req,res)=>{
  const id=z.string().uuid().parse(req.params.id),q=z.object({date:z.string().regex(/^\d{4}-\d{2}-\d{2}$/)}).strict().parse(req.query);
  const [store,settings]=await Promise.all([db.from('businesses').select('id,is_published,details').eq('id',id).maybeSingle(),db.from('pickup_settings').select('lead_minutes').eq('id',true).single()]);

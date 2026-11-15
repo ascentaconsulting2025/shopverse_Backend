@@ -31,6 +31,6 @@ export async function quoteDeliveryCart(userId:string,storeId:string,addressId:s
  const tenths=deliveryDistanceTenths(lat,lon,Number(destination.latitude),Number(destination.longitude));
  if(tenths/10>cfg.data.maxRadiusKm)throw new ApiError('Delivery is unavailable at this distance.',409);
  const rate=cfg.data.fleetRates.find(r=>r.fleetId===chosen.id);if(!rate)throw new ApiError('Delivery rate is not configured for this fleet.',409);
- const options=Object.entries(cfg.data.speeds).filter(([,v])=>v.enabled).map(([speed,v])=>({speed,charge:deliveryCharge(v.base,rate.perKm,tenths)}));
+ const options=Object.entries(cfg.data.speeds).filter(([,v])=>v.enabled).map(([speed,v])=>({speed,charge:deliveryCharge(v.base,rate.perKm,tenths),...(speed==='urgent' && 'estimatedTime' in v && v.estimatedTime ? {estimatedTime:v.estimatedTime} : {})}));
  return {fleet:chosen,distanceKm:tenths/10,options,origin,destination,config:cfg.data};
 }
