@@ -102,7 +102,7 @@ router.post('/place-pickup',publicRateLimiter,asyncHandler(async(req,res)=>{
   const addressText=[plain(address?.street),plain(address?.landmark),plain(address?.city),plain(address?.state),plain(address?.pincode)].filter(Boolean).join(', ');
   if(!addressText || !plain(address?.city) || !plain(address?.street) || typeof tz!=='string')throw new ApiError('Store pickup address or hours need updating.',409);
   const start=new Date(input.pickupStart);let date:string,slots:{start:string;end:string}[];
-  try{date=new Intl.DateTimeFormat('en-CA',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit'}).format(start);slots=pickupSlots(hours?.days?.en,hours?.timings?.en,tz,date,new Date(),settings.data.lead_minutes);}catch{throw new ApiError('Store pickup hours or timezone are invalid.',409);}
+  try{date=new Intl.DateTimeFormat('en-CA',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit'}).format(start);slots=pickupSlots(hours?.days,hours?.timings,tz,date,new Date(),settings.data.lead_minutes);}catch{throw new ApiError('Store pickup hours or timezone are invalid.',409);}
   const selected=slots.find(slot=>new Date(slot.start).getTime()===start.getTime());if(!selected)throw new ApiError('Pickup window is no longer available.',409);
   const result=await supabaseAdmin.rpc('place_pickup_store_request',{p_customer:user,p_store:input.storeId,p_key:input.requestKey,p_name:input.name,p_phone:input.phone,p_expected:input.items,p_start:selected.start,p_end:selected.end,p_hours:hours,p_address:address,p_address_text:addressText,p_lead:settings.data.lead_minutes});
   if(result.error){if(/Pickup availability changed|Request key already used|Cart changed|Cart or price changed|Store unavailable|Invalid cart/.test(result.error.message||''))throw new ApiError('Pickup or cart details changed. Refresh and review before trying again.',409);throw new ApiError('Could not save the pickup request.',503);}
@@ -168,7 +168,7 @@ async function validPickupWindow(storeId:string,startValue:string) {
  if(store.error||settings.error)throw new ApiError('Pickup service unavailable.',503);if(!store.data?.is_published)throw new ApiError('Store unavailable.',409);
  const hours=(store.data.details as any)?.businessHours,tz=hours?.timezone,start=new Date(startValue);let date:string,slots:{start:string;end:string}[];
  if(typeof tz!=='string'||!tz.trim())throw new ApiError('Store pickup hours or timezone are invalid.',409);
- try{date=new Intl.DateTimeFormat('en-CA',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit'}).format(start);slots=pickupSlots(hours?.days?.en,hours?.timings?.en,tz,date,new Date(),settings.data.lead_minutes);}catch{throw new ApiError('Store pickup hours or timezone are invalid.',409);}
+ try{date=new Intl.DateTimeFormat('en-CA',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit'}).format(start);slots=pickupSlots(hours?.days,hours?.timings,tz,date,new Date(),settings.data.lead_minutes);}catch{throw new ApiError('Store pickup hours or timezone are invalid.',409);}
  const slot=slots.find(s=>new Date(s.start).getTime()===start.getTime());if(!slot)throw new ApiError('Pickup window is no longer available.',409);
  return {hours,lead:settings.data.lead_minutes,slot};
 }

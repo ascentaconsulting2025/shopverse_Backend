@@ -15,8 +15,8 @@ router.get('/stores/:id/slots',publicRateLimiter,asyncHandler(async(req,res)=>{
  const [store,settings]=await Promise.all([db.from('businesses').select('id,is_published,details').eq('id',id).maybeSingle(),db.from('pickup_settings').select('lead_minutes').eq('id',true).single()]);
  if(store.error||settings.error)throw new ApiError('Unable to load pickup slots.',503);
  if(!store.data?.is_published)throw new ApiError('Store unavailable.',404);
- const details=store.data.details as any,timezone=details?.businessHours?.timezone,days=details?.businessHours?.days?.en,timings=details?.businessHours?.timings?.en;
+ const details=store.data.details as any,timezone=details?.businessHours?.timezone,days=details?.businessHours?.days,timings=details?.businessHours?.timings;
  if(typeof timezone!=='string'||!timezone.trim())throw new ApiError('Store pickup hours or timezone need updating.',409);
- try{const slots=pickupSlots(days,timings,timezone,q.date,new Date(),settings.data.lead_minutes);res.json(apiSuccess({timezone,slots}));}catch{throw new ApiError('Store pickup hours, timezone or date are invalid.',409);}
+ try{const now=new Date();const slots=pickupSlots(days,timings,timezone,q.date,now,settings.data.lead_minutes);const parts=new Intl.DateTimeFormat('en-GB',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(now);const today=['year','month','day'].map(key=>parts.find(part=>part.type===key)?.value).join('-');const emptyReason=slots.length ? null : q.date<today ? 'past_date' : 'no_slots';res.json(apiSuccess({timezone,slots,emptyReason}));}catch{throw new ApiError('Store pickup hours, timezone or date are invalid.',409);}
 }));
 export default router;
